@@ -85,7 +85,7 @@ install_mac() {
 
 install_linux() {
   # Update apt-get.
-  apt-get -y update
+  # apt-get -y update
   # Install packages.
   apt-get -y install \
       build-essential \

@@ -17,6 +17,7 @@
 #include <thread>  // NOLINT
 
 #include "common/exception.h"
+#include "common/logger.h"
 #include "gtest/gtest.h"
 #include "primer/p0_trie.h"
 
@@ -41,7 +42,8 @@ std::vector<std::string> GenerateNRandomString(int n) {
   return rand_strs;
 }
 
-TEST(StarterTest, DISABLED_TrieNodeInsertTest) {
+// cppcheck-suppress syntaxError
+TEST(StarterTest, TrieNodeInsertTest) {
   // Test Insert
   //  When same key is inserted twice, insert should return nullptr
   // When inserted key and unique_ptr's key does not match, return nullptr
@@ -60,7 +62,7 @@ TEST(StarterTest, DISABLED_TrieNodeInsertTest) {
   EXPECT_EQ((*child_node)->GetKeyChar(), 'c');
 }
 
-TEST(StarterTest, DISABLED_TrieNodeRemoveTest) {
+TEST(StarterTest, TrieNodeRemoveTest) {
   auto t = TrieNode('a');
   __attribute__((unused)) auto child_node = t.InsertChildNode('b', std::make_unique<TrieNode>('b'));
   child_node = t.InsertChildNode('c', std::make_unique<TrieNode>('c'));
@@ -78,7 +80,66 @@ TEST(StarterTest, DISABLED_TrieNodeRemoveTest) {
   EXPECT_EQ(child_node, nullptr);
 }
 
-TEST(StarterTest, DISABLED_TrieInsertTest) {
+TEST(StarterTest, TrieInsertTest) {
+  {
+    Trie trie;
+    bool success = true;
+    int val = -1;
+
+    // ----
+    success = trie.Insert<int>("MIT", 114);
+    EXPECT_EQ(success, true);
+
+    val = trie.GetValue<int>("MIT", &success);
+    EXPECT_EQ(success, true);
+    EXPECT_EQ(val, 114);
+    // ----
+
+    // ----
+    success = trie.Insert<int>("M", 5);
+    EXPECT_EQ(success, true);
+
+    val = trie.GetValue<int>("M", &success);
+    EXPECT_EQ(success, true);
+    EXPECT_EQ(val, 5);
+    // ----
+
+    // ----
+    success = trie.Insert<int>("M", 6);
+    EXPECT_EQ(success, false);
+
+    val = trie.GetValue<int>("M", &success);
+    EXPECT_EQ(success, true);
+    EXPECT_EQ(val, 5);
+    // ----
+  }
+  {
+    Trie trie;
+    bool success = true;
+    int val = -1;
+
+    // ----
+    success = trie.Insert<int>("aaa", 5);
+    EXPECT_EQ(success, true);
+
+    val = trie.GetValue<int>("aaa", &success);
+    EXPECT_EQ(success, true);
+    EXPECT_EQ(val, 5);
+    // ----
+
+    // ----
+    success = trie.Insert<int>("aa", 6);
+    EXPECT_EQ(success, true);
+
+    val = trie.GetValue<int>("aa", &success);
+    EXPECT_EQ(success, true);
+    EXPECT_EQ(val, 6);
+
+    val = trie.GetValue<int>("aaa", &success);
+    EXPECT_EQ(success, true);
+    EXPECT_EQ(val, 5);
+    // ----
+  }
   {
     Trie trie;
     trie.Insert<std::string>("abc", "d");
@@ -102,12 +163,15 @@ TEST(StarterTest, DISABLED_TrieInsertTest) {
     Trie trie;
     bool success = trie.Insert<int>("abc", 5);
     EXPECT_EQ(success, true);
+    LOG_INFO("insert 1? %d", success);
 
     success = trie.Insert<int>("abc", 6);
     EXPECT_EQ(success, false);
+    LOG_INFO("insert 2? %d", success);
 
     auto val = trie.GetValue<int>("abc", &success);
     EXPECT_EQ(success, true);
+    LOG_INFO("value? %d, success? %d", val, success);
     EXPECT_EQ(val, 5);
   }
 
@@ -129,7 +193,7 @@ TEST(StarterTest, DISABLED_TrieInsertTest) {
   }
 }
 
-TEST(StarterTrieTest, DISABLED_RemoveTest) {
+TEST(StarterTrieTest, RemoveTest) {
   {
     Trie trie;
     bool success = trie.Insert<int>("a", 5);
@@ -140,29 +204,37 @@ TEST(StarterTrieTest, DISABLED_RemoveTest) {
     EXPECT_EQ(success, true);
 
     success = trie.Remove("aaa");
+    LOG_INFO("remove1, success? %d", success);
     EXPECT_EQ(success, true);
     trie.GetValue<int>("aaa", &success);
+    LOG_INFO("get1, success? %d", success);
     EXPECT_EQ(success, false);
 
     success = trie.Insert("aaa", 8);
+    LOG_INFO("insert4, success? %d", success);
     EXPECT_EQ(success, true);
     EXPECT_EQ(trie.GetValue<int>("aaa", &success), 8);
+    LOG_INFO("get2, success? %d", success);
     EXPECT_EQ(success, true);
 
     // Remove non-existant keys should return false
     success = trie.Remove("aaaa");
+    LOG_INFO("remove2, success? %d", success);
     EXPECT_EQ(success, false);
 
     success = trie.Remove("aa");
+    LOG_INFO("remove3, success? %d", success);
     EXPECT_EQ(success, true);
     success = trie.Remove("a");
+    LOG_INFO("remove4, success? %d", success);
     EXPECT_EQ(success, true);
     success = trie.Remove("aaa");
+    LOG_INFO("remove5, success? %d", success);
     EXPECT_EQ(success, true);
   }
 }
 
-TEST(StarterTrieTest, DISABLED_ConcurrentTest1) {
+TEST(StarterTrieTest, ConcurrentTest1) {
   Trie trie;
   constexpr int num_words = 1000;
   constexpr int num_bits = 10;

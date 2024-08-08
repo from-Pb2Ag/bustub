@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "common/logger.h"
 #include "container/hash/hash_table.h"
 
 namespace bustub {
@@ -93,6 +94,7 @@ class ExtendibleHashTable : public HashTable<K, V> {
    * @param value The value to be inserted.
    */
   void Insert(const K &key, const V &value) override;
+  auto DoInsert(const K &key, const V &value) -> bool;
 
   /**
    *
@@ -157,6 +159,8 @@ class ExtendibleHashTable : public HashTable<K, V> {
      */
     auto Insert(const K &key, const V &value) -> bool;
 
+    auto GetListSize() -> size_t { return list_.size(); }
+
    private:
     // TODO(student): You may add additional private members and helper functions
     size_t size_;
@@ -174,6 +178,7 @@ class ExtendibleHashTable : public HashTable<K, V> {
   mutable std::mutex latch_;
   std::vector<std::shared_ptr<Bucket>> dir_;  // The directory of the hash table
 
+  size_t insert_op_;
   // The following functions are completely optional, you can delete them if you have your own ideas.
 
   /**

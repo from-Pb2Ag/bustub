@@ -14,8 +14,10 @@
 
 #include <limits>
 #include <list>
+#include <map>
 #include <mutex>  // NOLINT
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "common/config.h"
@@ -140,6 +142,23 @@ class LRUKReplacer {
   [[maybe_unused]] size_t replacer_size_;
   [[maybe_unused]] size_t k_;
   std::mutex latch_;
+  // collect all the evcitable frame ids.
+  std::unordered_map<frame_id_t, bool> evictable_coll_;
+  // maintain each frame with an ordered timestamp vector.
+  std::unordered_map<frame_id_t, std::vector<int64_t>> frames_coll_;
+  // cyclic buffer, with a last stand alone indicator.
+  std::unordered_map<frame_id_t, std::vector<int64_t>> frames_coll_enforced_;
+  /*
+    [start, end). end: next index to insert.
+    when start == end, it can empty or full (see flag in frames_coll_enforced_).
+  */
+  std::unordered_map<frame_id_t, std::pair<size_t, size_t>> frames_st_end_;
+  /*
+    time stamp => frame id. maintain accessed AT LEAST K times frames, and
+     accessed LESS THAN K times frames separately.
+  */
+  std::map<size_t, frame_id_t> record_first_;
+  std::map<size_t, frame_id_t> total_first_;
 };
 
 }  // namespace bustub

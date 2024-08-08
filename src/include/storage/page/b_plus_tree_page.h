@@ -46,6 +46,7 @@ class BPlusTreePage {
   auto IsRootPage() const -> bool;
   void SetPageType(IndexPageType page_type);
 
+  // `size` is not exactly the VALID key count.
   auto GetSize() const -> int;
   void SetSize(int size);
   void IncreaseSize(int amount);

@@ -14,57 +14,137 @@
 #include <cstdio>
 
 #include "buffer/buffer_pool_manager_instance.h"
+#include "common/logger.h"
 #include "gtest/gtest.h"
 #include "storage/index/b_plus_tree.h"
 #include "test_util.h"  // NOLINT
 
 namespace bustub {
 
-TEST(BPlusTreeTests, DISABLED_InsertTest1) {
-  // create KeyComparator and index schema
-  auto key_schema = ParseCreateStatement("a bigint");
-  GenericComparator<8> comparator(key_schema.get());
+TEST(BPlusTreeTests, InsertTest1) {
+  {
+    // create KeyComparator and index schema
+    auto key_schema = ParseCreateStatement("a bigint");
+    GenericComparator<8> comparator(key_schema.get());
 
-  auto *disk_manager = new DiskManager("test.db");
-  BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
-  // create b+ tree
-  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 2, 3);
-  GenericKey<8> index_key;
-  RID rid;
-  // create transaction
-  auto *transaction = new Transaction(0);
+    auto *disk_manager = new DiskManager("test.db");
+    BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
+    // create b+ tree
+    BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 2, 3);
+    LOG_INFO("create a new B+ tree.");
 
-  // create and fetch header_page
-  page_id_t page_id;
-  auto header_page = bpm->NewPage(&page_id);
-  ASSERT_EQ(page_id, HEADER_PAGE_ID);
-  (void)header_page;
+    GenericKey<8> index_key;
+    RID rid;
+    // create transaction
+    auto *transaction = new Transaction(0);
 
-  int64_t key = 42;
-  int64_t value = key & 0xFFFFFFFF;
-  rid.Set(static_cast<int32_t>(key), value);
-  index_key.SetFromInteger(key);
-  tree.Insert(index_key, rid, transaction);
+    // create and fetch header_page
+    page_id_t page_id;
+    auto header_page = bpm->NewPage(&page_id);
+    ASSERT_EQ(page_id, HEADER_PAGE_ID);
+    (void)header_page;
 
-  auto root_page_id = tree.GetRootPageId();
-  auto root_page = reinterpret_cast<BPlusTreePage *>(bpm->FetchPage(root_page_id)->GetData());
-  ASSERT_NE(root_page, nullptr);
-  ASSERT_TRUE(root_page->IsLeafPage());
+    int64_t key = 42;
+    int64_t value = key & 0xFFFFFFFF;
+    rid.Set(static_cast<int32_t>(key), value);
+    index_key.SetFromInteger(key);
 
-  auto root_as_leaf = reinterpret_cast<BPlusTreeLeafPage<GenericKey<8>, RID, GenericComparator<8>> *>(root_page);
-  ASSERT_EQ(root_as_leaf->GetSize(), 1);
-  ASSERT_EQ(comparator(root_as_leaf->KeyAt(0), index_key), 0);
+    LOG_INFO("insert k/v: <%ld, 0X%lX>", key, value);
 
-  bpm->UnpinPage(root_page_id, false);
-  bpm->UnpinPage(HEADER_PAGE_ID, true);
-  delete transaction;
-  delete disk_manager;
-  delete bpm;
-  remove("test.db");
-  remove("test.log");
+    tree.Insert(index_key, rid, transaction);
+
+    auto root_page_id = tree.GetRootPageId();
+
+    LOG_INFO("get root page id: %d", root_page_id);
+
+    auto root_page = reinterpret_cast<BPlusTreePage *>(bpm->FetchPage(root_page_id)->GetData());
+    ASSERT_NE(root_page, nullptr);
+    ASSERT_TRUE(root_page->IsLeafPage());
+
+    auto root_as_leaf = reinterpret_cast<BPlusTreeLeafPage<GenericKey<8>, RID, GenericComparator<8>> *>(root_page);
+    ASSERT_EQ(root_as_leaf->GetSize(), 1);
+    ASSERT_EQ(comparator(root_as_leaf->KeyAt(0), index_key), 0);
+
+    bpm->UnpinPage(root_page_id, false);
+    bpm->UnpinPage(HEADER_PAGE_ID, true);
+    delete transaction;
+    delete disk_manager;
+    delete bpm;
+    remove("test.db");
+    remove("test.log");
+  }
+  {
+    // create KeyComparator and index schema
+    auto key_schema = ParseCreateStatement("a bigint");
+    GenericComparator<8> comparator(key_schema.get());
+
+    auto *disk_manager = new DiskManager("test.db");
+    BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
+    // create b+ tree
+    BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 2, 3);
+    LOG_INFO("create a new B+ tree.");
+
+    GenericKey<8> index_key;
+    RID rid;
+    // create transaction
+    auto *transaction = new Transaction(0);
+
+    // create and fetch header_page
+    page_id_t page_id;
+    auto header_page = bpm->NewPage(&page_id);
+    ASSERT_EQ(page_id, HEADER_PAGE_ID);
+    (void)header_page;
+
+    // ----
+    int64_t key = 42;
+    int64_t value = key & 0xFFFFFFFF;
+    rid.Set(static_cast<int32_t>(key), value);
+    index_key.SetFromInteger(key);
+    GenericKey<8> first_key = index_key;
+
+    // ----
+    for (int i = 0; i < 5; i++) {
+      key = 42 + 2 * i;
+      value = key & 0xFFFFFFFF;
+      rid.Set(static_cast<int32_t>(key), value);
+      index_key.SetFromInteger(key);
+      LOG_INFO("insert k/v: <%ld, 0X%lX>", key, value);
+      tree.Insert(index_key, rid, transaction);
+    }
+    // key = 41;
+    // value = key & 0xFFFFFFFF;
+    // rid.Set(static_cast<int32_t>(key), value);
+    // index_key.SetFromInteger(key);
+    // LOG_INFO("insert k/v: <%ld, 0X%lX>", key, value);
+    // tree.Insert(index_key, rid, transaction);
+    // ----
+
+    auto root_page_id = tree.GetRootPageId();
+
+    LOG_INFO("get root page id: %d", root_page_id);
+
+    auto root_page = reinterpret_cast<BPlusTreePage *>(bpm->FetchPage(root_page_id)->GetData());
+    ASSERT_NE(root_page, nullptr);
+    ASSERT_FALSE(root_page->IsLeafPage());
+
+    auto root_as_internal =
+        reinterpret_cast<BPlusTreeInternalPage<GenericKey<8>, page_id_t, GenericComparator<8>> *>(root_page);
+    LOG_INFO("root size: %d", root_as_internal->GetSize());
+
+    index_key.SetFromInteger(43);
+    first_key = index_key;
+
+    bpm->UnpinPage(root_page_id, false);
+    bpm->UnpinPage(HEADER_PAGE_ID, true);
+    delete transaction;
+    delete disk_manager;
+    delete bpm;
+    remove("test.db");
+    remove("test.log");
+  }
 }
 
-TEST(BPlusTreeTests, DISABLED_InsertTest2) {
+TEST(BPlusTreeTests, InsertTest2) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -91,8 +171,10 @@ TEST(BPlusTreeTests, DISABLED_InsertTest2) {
     tree.Insert(index_key, rid, transaction);
   }
 
+  LOG_INFO("finish insert");
   std::vector<RID> rids;
   for (auto key : keys) {
+    LOG_INFO("get key: %ld", key);
     rids.clear();
     index_key.SetFromInteger(key);
     tree.GetValue(index_key, &rids);
@@ -127,7 +209,7 @@ TEST(BPlusTreeTests, DISABLED_InsertTest2) {
   remove("test.log");
 }
 
-TEST(BPlusTreeTests, DISABLED_InsertTest3) {
+TEST(BPlusTreeTests, InsertTest3) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -157,6 +239,7 @@ TEST(BPlusTreeTests, DISABLED_InsertTest3) {
 
   std::vector<RID> rids;
   for (auto key : keys) {
+    // LOG_INFO("get key: %ld", key);
     rids.clear();
     index_key.SetFromInteger(key);
     tree.GetValue(index_key, &rids);
