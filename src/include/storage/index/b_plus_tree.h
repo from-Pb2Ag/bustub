@@ -100,6 +100,9 @@ class BPlusTree {
   void InsertInternalCanSplit(const std::vector<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *> &st,
                               const KeyType &key, const page_id_t &value);
 
+  void InnerPageMerge(
+      const std::vector<std::pair<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *, int>> &st);
+
   /* Debug Routines for FREE!! */
   void ToGraph(BPlusTreePage *page, BufferPoolManager *bpm, std::ofstream &out) const;
 

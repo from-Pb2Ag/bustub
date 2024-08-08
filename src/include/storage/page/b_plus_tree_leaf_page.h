@@ -55,6 +55,7 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   void SetKeyAt(int index, const KeyType &key);
   void SetValueAt(int index, const ValueType &value);
   void MoveForward(int index);
+  void MoveBackward(int index);
 
  private:
   page_id_t next_page_id_;

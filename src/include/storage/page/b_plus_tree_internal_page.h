@@ -43,6 +43,7 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   auto ValueAt(int index) const -> ValueType;
   void SetValueAt(int index, const ValueType &value);
   void MoveForward(int index);
+  void MoveBackward(int index);
 
  private:
   // Flexible array member for page data.
