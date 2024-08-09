@@ -48,16 +48,24 @@ auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
   frame_id_t new_frame_id = -1;
   // frame id. find from the free list first.
   if (!free_list_.empty()) {
+    // LOG_INFO("####0 get from free list. cur free list size: %ld.", free_list_.size());
     new_frame_id = free_list_.back();
     free_list_.pop_back();
   } else {
+    // std::vector<std::pair<frame_id_t, bool>> fuck;
+    // replacer_->PrintAux(&fuck);
+    // for (const auto &[a, b] : fuck) {
+    //   LOG_INFO("frame/page: %d/%d is evictable? %d", a, (pages_ + a)->GetPageId(), b);
+    // }
     if (replacer_->Evict(&new_frame_id)) {
       page_id_t stale_page_id = pages_[new_frame_id].GetPageId();
+      // LOG_INFO("$$$$0 get from evict: %d", stale_page_id);
       if (pages_[new_frame_id].IsDirty()) {
         FlushPgImpInner(stale_page_id);
       }
       page_table_->Remove(stale_page_id);
     } else {
+      // LOG_INFO("@@@@0 failed");
       // if now free_list and can evict nothing.
       return nullptr;
     }
@@ -67,6 +75,7 @@ auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
   */
   *page_id = AllocatePage();
 
+  LOG_INFO("new a page with `NewPgImp`. new page id: %d. frame id %d", *page_id, new_frame_id);
   pages_[new_frame_id].ResetMemory();
   pages_[new_frame_id].page_id_ = *page_id;
   pages_[new_frame_id].pin_count_ = 1;
@@ -82,6 +91,11 @@ auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
 auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
   // std::scoped_lock<std::mutex> lock(latch_);
   latch_.lock();
+  // page_id can present invalid page.
+  if (page_id == INVALID_PAGE_ID) {
+    latch_.unlock();
+    return nullptr;
+  }
   frame_id_t corresponding_f_id;
   // fetch in buffer pool in success.
   if (page_table_->Find(page_id, corresponding_f_id)) {
@@ -95,22 +109,31 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
   }
 
   if (!free_list_.empty()) {
+    // LOG_INFO("####1 get from free list. cur free list size: %ld.", free_list_.size());
     corresponding_f_id = free_list_.back();
     free_list_.pop_back();
   } else {
+    // std::vector<std::pair<frame_id_t, bool>> fuck;
+    // replacer_->PrintAux(&fuck);
+    // for (const auto &[a, b] : fuck) {
+    //   LOG_INFO("frame/page: %d/%d is evictable? %d", a, (pages_ + a)->GetPageId(), b);
+    // }
     if (replacer_->Evict(&corresponding_f_id)) {
       page_id_t stale_page_id = pages_[corresponding_f_id].GetPageId();
+      // LOG_INFO("$$$$1 get from evict: %d", stale_page_id);
       if (pages_[corresponding_f_id].IsDirty()) {
         FlushPgImpInner(stale_page_id);
       }
       page_table_->Remove(stale_page_id);
     } else {
+      // LOG_INFO("@@@@1 failed");
       // if now free_list and can evict nothing.
       latch_.unlock();
       return nullptr;
       // return NULL;
     }
   }
+  // LOG_INFO("fetch an existing page with `FetchPgImp`. page id: %d. frame id %d", page_id, corresponding_f_id);
   // read the page from disk.
   pages_[corresponding_f_id].ResetMemory();
   pages_[corresponding_f_id].page_id_ = page_id;
@@ -144,7 +167,18 @@ auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> 
 
   if (--pages_[corresponding_f_id].pin_count_ == 0) {
     // set evitable.
+    // LOG_INFO("set frame/page: %d/%d evictable.", corresponding_f_id, page_id);
+
+    // LOG_INFO("**********");
     replacer_->SetEvictable(corresponding_f_id, true);
+    // std::vector<std::pair<frame_id_t, bool>> fuck;
+    // std::unordered_map<frame_id_t, bool> damn;
+    // replacer_->PrintAux(&fuck);
+    // for (const auto &[a, b] : fuck) {
+    //   damn.insert({a, true});
+    //   LOG_INFO("frame/page: %d/%d is evictable? %d", a, (pages_ + a)->GetPageId(), b);
+    // }
+    // LOG_INFO("**********");
   }
   if (is_dirty) {
     pages_[corresponding_f_id].is_dirty_ = true;

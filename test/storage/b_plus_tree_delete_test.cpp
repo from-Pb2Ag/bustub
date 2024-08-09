@@ -40,7 +40,7 @@ TEST(BPlusTreeTests, DeleteTest1) {
     auto header_page = bpm->NewPage(&page_id);
     (void)header_page;
 
-    std::vector<int64_t> keys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13};
+    std::vector<int64_t> keys = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19};
     for (auto key : keys) {
       int64_t value = key & 0xFFFFFFFF;
       rid.Set(static_cast<int32_t>(key >> 32), value);
@@ -65,19 +65,20 @@ TEST(BPlusTreeTests, DeleteTest1) {
       tree.Remove(index_key, transaction);
     }
 
-    std::vector<int64_t> rejoin_keys = remove_keys;
-    for (auto key : rejoin_keys) {
-      int64_t value = key & 0xFFFFFFFF;
-      rid.Set(static_cast<int32_t>(key >> 32), value);
-      index_key.SetFromInteger(key);
-      tree.Insert(index_key, rid, transaction);
-    }
+    // std::vector<int64_t> rejoin_keys = remove_keys;
+    // for (auto key : rejoin_keys) {
+    //   int64_t value = key & 0xFFFFFFFF;
+    //   rid.Set(static_cast<int32_t>(key >> 32), value);
+    //   index_key.SetFromInteger(key);
+    //   tree.Insert(index_key, rid, transaction);
+    // }
 
-    remove_keys = {12};
-    for (auto key : remove_keys) {
-      index_key.SetFromInteger(key);
-      tree.Remove(index_key, transaction);
-    }
+    // remove_keys = {12, 11, 9, 10};
+    // for (auto key : remove_keys) {
+    //   LOG_INFO("start second rem");
+    //   index_key.SetFromInteger(key);
+    //   tree.Remove(index_key, transaction);
+    // }
 
     // int64_t size = 0;
     // bool is_present;

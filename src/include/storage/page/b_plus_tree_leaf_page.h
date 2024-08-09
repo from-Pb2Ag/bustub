@@ -59,7 +59,7 @@ class BPlusTreeLeafPage : public BPlusTreePage {
 
  private:
   page_id_t next_page_id_;
-  page_id_t prev_page_id_;
+  // page_id_t prev_page_id_;
   // Flexible array member for page data.
   MappingType array_[1];
 };

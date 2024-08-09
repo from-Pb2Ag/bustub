@@ -10,8 +10,11 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
+#include <iomanip>
 #include <queue>
+#include <set>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -98,11 +101,17 @@ class BPlusTree {
       -> std::pair<int, bool>;
 
   void InsertInternalCanSplit(const std::vector<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *> &st,
-                              const KeyType &key, const page_id_t &value);
+                              const KeyType &key, const page_id_t &value,
+                              std::unordered_map<page_id_t, bool> *unpin_is_dirty,
+                              std::unordered_map<page_id_t, size_t> *fuck);
 
   void InnerPageMerge(
       const std::vector<std::pair<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *, int>> &st);
 
+  void UnpinPages(const std::unordered_map<page_id_t, bool> &unpin_is_dirty,
+                  const std::unordered_map<page_id_t, size_t> &fuck);
+
+  void LogBPlusTreePageHeader(BPlusTreePage *page);
   /* Debug Routines for FREE!! */
   void ToGraph(BPlusTreePage *page, BufferPoolManager *bpm, std::ofstream &out) const;
 
