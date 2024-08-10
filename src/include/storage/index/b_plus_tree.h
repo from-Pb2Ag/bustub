@@ -111,6 +111,33 @@ class BPlusTree {
   void UnpinPages(const std::unordered_map<page_id_t, bool> &unpin_is_dirty,
                   const std::unordered_map<page_id_t, size_t> &fuck);
 
+  /*
+    if a page (no matter leaf or internal) updates its key in slot #0,
+    it will populate through its ancestors (and stop conditionally).
+  */
+  void FirstKeyPopulateUp(
+      const KeyType &new_key,
+      std::vector<std::pair<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *, int>> *st_1);
+
+  void MergedToLeftSibling(BPlusTreePage *prev_page, BPlusTreePage *this_page);
+
+  void BorrowFromLeftSibling(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *prev_page,
+                             BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *this_page);
+
+  void BorrowFromRightSibling(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *this_page,
+                              BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *next_page);
+
+  void PopulateUpV2(BPlusTreePage *this_page, const KeyType &old_first_key, const KeyType &new_first_key);
+
+  void MergedWithRightSibling(BPlusTreePage *this_page, BPlusTreePage *next_page);
+
+  /*
+    -----------------------------------------
+    | Type: R|I | cur_sz: xxx | max_sz: xxx |
+    -----------------------------------------
+    | PPid: xxx | Pid: xxx    | Nid: xxx    |
+    -----------------------------------------
+  */
   void LogBPlusTreePageHeader(BPlusTreePage *page);
   /* Debug Routines for FREE!! */
   void ToGraph(BPlusTreePage *page, BufferPoolManager *bpm, std::ofstream &out) const;

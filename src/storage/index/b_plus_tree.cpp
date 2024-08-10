@@ -43,23 +43,15 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
   // LOG_INFO("op: %d. attempts get value of key %ld", op_id_, key.ToString());
 
   do {
-    // BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *ptr_2_internal =
-    //     reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(ptr);
-    // BPlusTreeLeafPage<KeyType, RID, KeyComparator> *ptr_2_leaf =
-    //     reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(ptr);
     auto *tmp_ptr = reinterpret_cast<BPlusTreePage *>(ptr);
 
     if (!tmp_ptr->IsLeafPage()) {
       auto ptr_2_internal = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(ptr);
       auto ret = FindFirstInfIndex(key, ptr_2_internal);
-      // if (op_id_ == 8971) {
-      //   LOG_INFO("key: %ld. ret: [%d, %d]", key.ToString(), ret.first, ret.second);
-      //   LogInternalPage(ptr_2_internal);
-      // }
+
       tmp = ptr;
       ptr = buffer_pool_manager_->FetchPage(ptr_2_internal->ValueAt(ret.first));
       buffer_pool_manager_->UnpinPage(tmp->GetPageId(), false);
-      // LOG_INFO("next page id %d, ptr %p", ptr_2_internal->ValueAt(ret.first), ptr);
       if (ptr_2_internal->ValueAt(ret.first) == INVALID_PAGE_ID) {
         return false;
       }
@@ -105,14 +97,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   // LOG_INFO("attempts insert kv: %ld. op_id: %d", key.ToString(), op_id_);
   op_id_++;
 
-  // if ((op_id_ >= 400) && (op_id_ <= 600)) {
-  //   KeyType index_key;
-  //   index_key.SetFromInteger(2933);
-  //   std::vector<ValueType> tmp;
-  //   bool flag = GetValue(index_key, &tmp, transaction);
-  //   LOG_INFO("op id: %d, attempts insert k: %ld. can find key 3453? %d", op_id_, key.ToString(), flag);
-  // }
-  // FinalAction final_action(this);
+  FinalAction final_action(this);
   // final_action.Deactivate();
 
   if (IsEmpty()) {
@@ -120,8 +105,9 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     // buffer_pool_manager_->NewPage(&root_page_id_);
     auto *ptr_2_leaf = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(
         buffer_pool_manager_->NewPage(&root_page_id_));
+    UpdateRootPageId();
 
-    LOG_INFO("update root page id: %d", root_page_id_);
+    LOG_INFO("1update root page id: %d", root_page_id_);
     ptr_2_leaf->Init(root_page_id_, INVALID_PAGE_ID, leaf_max_size_);
     ptr_2_leaf->SetKeyAt(0, key);
 
@@ -129,7 +115,6 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     ptr_2_leaf->IncreaseSize(1);
 
     ptr_2_leaf->SetNextPageId(INVALID_PAGE_ID);
-    // ptr_2_leaf->SetPrevPageId(INVALID_PAGE_ID);
 
     // LogLeafPage(ptr_2_leaf);
     buffer_pool_manager_->UnpinPage(root_page_id_, true);
@@ -150,26 +135,18 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *ptr_2_internal = nullptr;
   BPlusTreeLeafPage<KeyType, RID, KeyComparator> *ptr_2_leaf = nullptr;
   BPlusTreePage *cur_bpluspage_ptr = nullptr;
-  if (key.ToString() == 3322) {
-    LOG_INFO("phase 1");
-  }
 
   do {
     cur_bpluspage_ptr = reinterpret_cast<BPlusTreePage *>(ptr);
     if (!cur_bpluspage_ptr->IsLeafPage()) {
-      if (key.ToString() == 3322) {
-        LOG_INFO("phase 2");
-      }
       ptr_2_internal = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(cur_bpluspage_ptr);
       st.push_back(ptr_2_internal);
+      LogInternalPage(ptr_2_internal);
       auto ret = FindFirstInfIndex(key, ptr_2_internal);
       // LOG_INFO("ret: %d, %d", ret.first, ret.second);
       // already existing?
       if (!ret.second) {
         UnpinPages(unpin_is_dirty, fuck);
-        if (key.ToString() == 3322) {
-          LOG_INFO("phase 3");
-        }
         return false;
       }
 
@@ -180,9 +157,6 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
         // LOG_INFO("pin page #%d", ptr->GetPageId());
       }
       if (ptr->GetPageId() == 0) {
-        if (key.ToString() == 3322) {
-          LOG_INFO("phase 4");
-        }
         break;
       }
       continue;
@@ -198,31 +172,18 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     // LOG_INFO("++++stack trace end++++++");
     ptr_2_leaf = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(cur_bpluspage_ptr);
     auto ret = FindFirstInfIndex(key, ptr_2_leaf);
-    // 草泥马的2933
-    if (key.ToString() == 3322) {
-      LOG_INFO("attempts insert key %ld. ret: [%d, %d]. leaf page id: %d. size:[%d, %d]", key.ToString(), ret.first,
-               ret.second, ptr_2_leaf->GetPageId(), ptr_2_leaf->GetSize(), ptr_2_leaf->GetMaxSize());
-
-      // LogLeafPage(ptr_2_leaf);
-    }
     if (!ret.second && ret.first < ptr_2_leaf->GetSize() + 1) {
       UnpinPages(unpin_is_dirty, fuck);
-      if (key.ToString() == 3322) {
-        LOG_INFO("phase 5");
-      }
       return false;
     }
     // can insert in safe.
     unpin_is_dirty.insert_or_assign(ptr_2_leaf->GetPageId(), true);
-    // LOG_INFO("pin page #%d", ptr_2_leaf->GetPageId());
-    // LOG_INFO("page id:%d, size: %d, %d", ptr_2_leaf->GetPageId(), ptr_2_leaf->GetSize(), ptr_2_leaf->GetMaxSize());
     if (ptr_2_leaf->GetSize() < ptr_2_leaf->GetMaxSize()) {
       ptr_2_leaf->MoveForward(ret.first);
       ptr_2_leaf->SetKeyAt(ret.first, key);
       ptr_2_leaf->SetValueAt(ret.first, value);
       ptr_2_leaf->IncreaseSize(1);
 
-      // LogLeafPage(ptr_2_leaf);
       UnpinPages(unpin_is_dirty, fuck);
       return true;
     }
@@ -230,30 +191,29 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     /*
       |----------|      |-------------|
       |ptr_2_leaf| ---> |next_leaf_ptr|
-      |----------|<···· |-------------|
+      |----------|      |-------------|
 
       |----------|      |---|      |-------------|
       |ptr_2_leaf| ---> |new| ---> |next_leaf_ptr|
-      |----------|<---- |---|<···· |-------------|
+      |----------|      |---|      |-------------|
       `<····` are only conditional.
     */
     page_id_t next_page = ptr_2_leaf->GetNextPageId();
     page_id_t neww_page = INVALID_PAGE_ID;
 
     Page *neww_ptr = buffer_pool_manager_->NewPage(&neww_page);
-    Page *next_ptr = buffer_pool_manager_->FetchPage(next_page);
+    // Page *next_ptr = buffer_pool_manager_->FetchPage(next_page);
 
     fuck[neww_page]++;
-    fuck[next_page]++;
-    // LOG_INFO("pin page #%d", neww_page);
-    // LOG_INFO("pin page #%d", next_page);
+    // fuck[next_page]++;
+
     unpin_is_dirty.insert_or_assign(neww_page, true);
     if (unpin_is_dirty.find(next_page) == unpin_is_dirty.end()) {
       unpin_is_dirty.insert({next_page, false});
     }
 
     auto *neww_page_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(neww_ptr);
-    auto *next_page_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(next_ptr);
+    // auto *next_page_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(next_ptr);
 
     if (neww_page_ptr == nullptr) {
       LOG_INFO("neww_page id: %d", neww_page);
@@ -266,15 +226,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
 
     neww_page_ptr->Init(neww_page, ptr_2_leaf->GetParentPageId(), leaf_max_size_);
     neww_page_ptr->SetNextPageId(next_page);
-    // neww_page_ptr->SetPrevPageId(ptr_2_leaf->GetPageId());
     ptr_2_leaf->SetNextPageId(neww_page);
-    if (next_page_ptr != nullptr) {
-      // next_page_ptr->SetPrevPageId(neww_page);
-      unpin_is_dirty.insert_or_assign(next_page, true);
-    }
-    if (key.ToString() == 3322) {
-      LOG_INFO("1new page#%d. get from ptr: %d", neww_page, neww_page_ptr->GetPageId());
-    }
 
     // ret = FindFirstInfIndex(key, ptr_2_leaf);
     int total = ptr_2_leaf->GetMaxSize() + 1;
@@ -284,22 +236,11 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     int cnt = 0;
     bool flag = false;
     // LOG_INFO("prev size: [%d =>%d] + 1", ptr_2_leaf->GetPageId(), ptr_2_leaf->GetSize());
-    if (key.ToString() == 3322) {
-      LOG_INFO("++++++++++++++++");
-      LOG_INFO("total to remove: %d", rem_to_mov);
-      LOG_INFO("2new page#%d. get from ptr: %d", neww_page, neww_page_ptr->GetPageId());
-      LOG_INFO("ParentPageId: %d.", neww_page_ptr->GetParentPageId());
-      LOG_INFO("PageId: %d.", neww_page_ptr->GetPageId());
-      LOG_INFO("NextPageId: %d.", neww_page_ptr->GetNextPageId());
-      LOG_INFO("++++++++++++++++");
-    }
+
     if (ret.first == cur) {
       // ptr_2_leaf ----> neww_page_ptr. the additional one is also moved to neww_page_ptr.
       // rem_to_mov++;
       // save++;
-      if (key.ToString() == 3322) {
-        LOG_INFO("[%ld:%s] >> case1 `new_page`", key.ToString(), value.ToString().c_str());
-      }
       neww_page_ptr->SetKeyAt(rem_to_mov - 1, key);
       neww_page_ptr->SetValueAt(rem_to_mov - 1, value);
       rem_to_mov--;
@@ -307,56 +248,21 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     }
     while (rem_to_mov > 0) {
       cnt++;
-      if (key.ToString() == 3322) {
-        LOG_INFO("id: %d [%ld:%s] >> case2 `new_page`", ptr_2_leaf->GetPageId(), ptr_2_leaf->KeyAt(cur - 1).ToString(),
-                 ptr_2_leaf->ValueAt(cur - 1).ToString().c_str());
-        if (rem_to_mov < 10) {
-          LOG_INFO("++++++++++++++++");
-          LOG_INFO("count down: %d", rem_to_mov);
-          LOG_INFO("4new page#%d. get from ptr: %d", neww_page, neww_page_ptr->GetPageId());
-          LOG_INFO("ParentPageId: %d.", neww_page_ptr->GetParentPageId());
-          LOG_INFO("PageId: %d.", neww_page_ptr->GetPageId());
-          LOG_INFO("NextPageId: %d.", neww_page_ptr->GetNextPageId());
-          LOG_INFO("++++++++++++++++");
-        }
-      }
       neww_page_ptr->SetKeyAt(rem_to_mov - 1, ptr_2_leaf->KeyAt(cur - 1));
       neww_page_ptr->SetValueAt(rem_to_mov - 1, ptr_2_leaf->ValueAt(cur - 1));
       rem_to_mov--;
       cur--;
       if (!flag && ret.first == cur && rem_to_mov > 0) {
         // ptr_2_leaf ----> neww_page_ptr. the additional one is also moved to neww_page_ptr.
-        if (key.ToString() == 3322) {
-          LOG_INFO("[%ld:%s] >> case3 `new_page`", key.ToString(), value.ToString().c_str());
-        }
         // rem_to_mov++;
         // save++;
         neww_page_ptr->SetKeyAt(rem_to_mov - 1, key);
         neww_page_ptr->SetValueAt(rem_to_mov - 1, value);
         rem_to_mov--;
         flag = true;
-        if (key.ToString() == 3322) {
-          if (rem_to_mov < 10) {
-            LOG_INFO("++++++++++++++++");
-            LOG_INFO("count down: %d", rem_to_mov);
-            LOG_INFO("5new page#%d. get from ptr: %d", neww_page, neww_page_ptr->GetPageId());
-            LOG_INFO("ParentPageId: %d.", neww_page_ptr->GetParentPageId());
-            LOG_INFO("PageId: %d.", neww_page_ptr->GetPageId());
-            LOG_INFO("NextPageId: %d.", neww_page_ptr->GetNextPageId());
-            LOG_INFO("++++++++++++++++");
-          }
-        }
       }
     }
 
-    if (key.ToString() == 3322) {
-      LOG_INFO("++++++++++++++++");
-      LOG_INFO("3new page#%d. get from ptr: %d", neww_page, neww_page_ptr->GetPageId());
-      LOG_INFO("ParentPageId: %d.", neww_page_ptr->GetParentPageId());
-      LOG_INFO("PageId: %d.", neww_page_ptr->GetPageId());
-      LOG_INFO("NextPageId: %d.", neww_page_ptr->GetNextPageId());
-      LOG_INFO("++++++++++++++++");
-    }
     ptr_2_leaf->IncreaseSize(-cnt);
     neww_page_ptr->IncreaseSize(save);
     if (!flag) {
@@ -366,23 +272,14 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
       ptr_2_leaf->IncreaseSize(1);
     }
 
-    if (key.ToString() == 3322) {
-      LOG_INFO("#####");
-      LOG_INFO("new page#%d. get from ptr: %d", neww_page, neww_page_ptr->GetPageId());
-      LogLeafPage(ptr_2_leaf);
-      LogLeafPage(neww_page_ptr);
-    }
     if (ptr_2_leaf->GetParentPageId() == INVALID_PAGE_ID) {
-      // LOG_INFO("!!!!!");
       buffer_pool_manager_->NewPage(&root_page_id_);
-      LOG_INFO("update root page id: %d", root_page_id_);
-      // LOG_INFO("?????");
+      LOG_INFO("2update root page id: %d", root_page_id_);
+      UpdateRootPageId();
       fuck[root_page_id_]++;
-      // LOG_INFO("pin page #%d", root_page_id_);
 
       auto *new_root = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
           buffer_pool_manager_->FetchPage(root_page_id_));
-      // LOG_INFO("pin page #%d", root_page_id_);
       fuck[root_page_id_]++;
       unpin_is_dirty.insert_or_assign(root_page_id_, true);
       new_root->Init(root_page_id_, INVALID_PAGE_ID, internal_max_size_);
@@ -390,13 +287,13 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
       ptr_2_leaf->SetParentPageId(root_page_id_);
       neww_page_ptr->SetParentPageId(root_page_id_);
 
+      new_root->SetKeyAt(0, ptr_2_leaf->KeyAt(0));
       new_root->SetValueAt(0, ptr_2_leaf->GetPageId());
       new_root->SetKeyAt(1, neww_page_ptr->KeyAt(0));
       new_root->SetValueAt(1, neww_page);
       new_root->SetSize(2);
 
-      // LogInternalPage(new_root);
-
+      LogInternalPage(new_root);
       UnpinPages(unpin_is_dirty, fuck);
       return true;
     }
@@ -463,12 +360,6 @@ void BPLUSTREE_TYPE::LogBPlusTreePageHeader(BPlusTreePage *page) {
 
   std::string format_str = oss.str();
   LOG_INFO("%s", format_str.c_str());
-
-  // -----------------------------------------
-  // | Type: R|I | cur_sz: xxx | max_sz: xxx |
-  // -----------------------------------------
-  // | PPid: xxx | Pid: xxx    | Nid: xxx    |
-  // -----------------------------------------
 }
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -524,7 +415,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
   LOG_INFO("attempts remove k:  %ld", key.ToString());
   op_id_++;
   FinalAction final_action(this);
-  final_action.Deactivate();
+  // final_action.Deactivate();
 
   if (IsEmpty()) {
     return;
@@ -540,158 +431,478 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
       auto ret = FindFirstInfIndex(key, ptr_2_internal);
       ptr = buffer_pool_manager_->FetchPage(ptr_2_internal->ValueAt(ret.first));
       st_1.push_back({ptr_2_internal, ret.first});
+      LogInternalPage(ptr_2_internal);
     } else {
       auto ptr_2_leaf = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(ptr);
-      // LogLeafPage(ptr_2_leaf);
+      LogLeafPage(ptr_2_leaf);
 
-      // LOG_INFO("++++stack trace begin++++");
-      // for (const auto &[a, b] : st_1) {
-      //   LOG_INFO("page id: %d, index: %d", a->GetPageId(), b);
-      // }
-      // LOG_INFO("++++stack trace end++++++");
+      LOG_INFO("++++stack trace begin++++");
+      for (const auto &[a, b] : st_1) {
+        LOG_INFO("page id: %d, index: %d", a->GetPageId(), b);
+      }
+      LOG_INFO("++++stack trace end++++++");
 
+      size_t index_for_key = 0;
+      bool find = false;
       for (int i = 0; i < ptr_2_leaf->GetSize(); i++) {
         int comp = comparator_(key, ptr_2_leaf->KeyAt(i));
-        // LOG_INFO("comp: %d, key: %ld, %ld", comp, key.ToString(), ptr_2_leaf->KeyAt(i).ToString());
-        if (comp == 0) {
-          // the leaf is large enough. it will not be merged.
-          // the worst case is the previous first key is removed (<<), and update key in its ancestors.
-          if (ptr_2_leaf->GetSize() > ptr_2_leaf->GetMinSize() || ptr_2_leaf->IsRootPage()) {
-            // LOG_INFO("remove in safe, branch 1");
-            ptr_2_leaf->MoveBackward(i);
-            ptr_2_leaf->IncreaseSize(-1);
-            KeyType new_leaf_first_key = ptr_2_leaf->KeyAt(0);
+        if (comp <= 0) {
+          if (comp == 0) {
+            index_for_key = i;
+            find = true;
+          }
+          break;
+        }
+      }
 
-            while (!st_1.empty()) {
-              KeyType tmp_key = st_1.back().first->KeyAt(st_1.back().second);
-              if (comparator_(tmp_key, key) == 0) {
-                st_1.back().first->SetKeyAt(st_1.back().second, new_leaf_first_key);
-                st_1.pop_back();
-              } else {
+      if (!find) {
+        LOG_INFO("####");
+        return;
+      }
+
+      // move `ptr_2_leaf` first.
+      ptr_2_leaf->MoveBackward(index_for_key);
+      ptr_2_leaf->IncreaseSize(-1);
+      /*
+        find case1: the leaf will not be merged (Simple Deletes), after delete, size still >= min size.
+        if the FIRST kv in leaf page is deleted, will look-up.
+      */
+      if (ptr_2_leaf->GetSize() >= ptr_2_leaf->GetMinSize() || ptr_2_leaf->IsRootPage()) {
+        // ptr_2_leaf->MoveBackward(index_for_key);
+        // ptr_2_leaf->IncreaseSize(-1);
+
+        size_t populate_index = index_for_key;
+        KeyType new_leaf_first_key = ptr_2_leaf->KeyAt(0);
+        while (populate_index == 0 && !st_1.empty()) {
+          st_1.back().first->SetKeyAt(st_1.back().second, new_leaf_first_key);
+          populate_index = st_1.back().second;
+          LOG_INFO("!!!!");
+          st_1.pop_back();
+        }
+        return;
+      }
+
+      LOG_INFO("????");
+      if (st_1.back().second > 0) {
+        LOG_INFO("!!!!");
+        page_id_t prev_page_id = st_1.back().first->ValueAt(st_1.back().second - 1);
+        auto prev_leaf_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(
+            buffer_pool_manager_->FetchPage(prev_page_id));
+
+        // prev can "provide" the last one.
+        // ptr_2_leaf page using it as the new first key (and look up.).
+        if (prev_leaf_ptr->GetSize() > ptr_2_leaf->GetMinSize()) {
+          KeyType mov_key = prev_leaf_ptr->KeyAt(prev_leaf_ptr->GetSize() - 1);
+          ValueType mov_value = prev_leaf_ptr->ValueAt(prev_leaf_ptr->GetSize() - 1);
+
+          ptr_2_leaf->MoveForward(0);
+          ptr_2_leaf->SetKeyAt(0, mov_key);
+          ptr_2_leaf->SetValueAt(0, mov_value);
+          ptr_2_leaf->IncreaseSize(1);
+
+          prev_leaf_ptr->IncreaseSize(-1);
+
+          KeyType new_leaf_first_key = ptr_2_leaf->KeyAt(0);
+          FirstKeyPopulateUp(new_leaf_first_key, &st_1);
+          return;
+        }
+
+        // merged to prev page (merge leaf pages)?
+        // and set flag as TRUE. if merged with next page toggle to FALSE.
+        MergedToLeftSibling(prev_leaf_ptr, ptr_2_leaf);
+        bool flag = true;
+        // this line replace the following ones.
+        // ----
+        // int before_size = prev_leaf_ptr->GetSize();
+        // for (int i = 0; i < ptr_2_leaf->GetSize(); i++) {
+        //   prev_leaf_ptr->SetKeyAt(before_size + i, ptr_2_leaf->KeyAt(i));
+        //   prev_leaf_ptr->SetValueAt(before_size + i, ptr_2_leaf->ValueAt(i));
+        // }
+        // prev_leaf_ptr->SetNextPageId(ptr_2_leaf->GetNextPageId());
+        // prev_leaf_ptr->IncreaseSize(ptr_2_leaf->GetSize());
+
+        // buffer_pool_manager_->DeletePage(ptr_2_leaf->GetPageId());
+        // ----
+
+        // st_1.back().first->MoveBackward(st_1.back().second);
+        // st_1.back().first->IncreaseSize(-1);
+
+        for (int i = st_1.size() - 1; i >= 0; i--) {
+          KeyType old_first_key = st_1[i].first->KeyAt(0);
+          if (flag) {
+            st_1[i].first->MoveBackward(st_1[i].second);
+          } else {
+            st_1[i].first->MoveBackward(st_1[i].second + 1);
+          }
+          st_1[i].first->IncreaseSize(-1);
+          KeyType new_first_key = st_1[i].first->KeyAt(0);
+          PopulateUpV2(st_1[i].first, old_first_key, new_first_key);
+
+          if (st_1[i].first->GetSize() >= st_1[i].first->GetMinSize()) {
+            break;
+          }
+          if (i > 0) {
+            // internal borrow/merge with left sibling.
+            if (st_1[i - 1].second > 0) {
+              LOG_INFO("xxx: %d, internal page#%d borrow/merge with left sibling.", i, st_1[i].first->GetPageId());
+              // the other one is  st_1[i].first.
+              page_id_t prev_page_id = st_1[i - 1].first->ValueAt(st_1[i - 1].second - 1);
+              auto prev_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
+                  buffer_pool_manager_->FetchPage(prev_page_id));
+              if (prev_ptr->GetSize() > prev_ptr->GetMinSize()) {
+                BorrowFromLeftSibling(prev_ptr, st_1[i].first);
                 break;
+              } else {
+                MergedToLeftSibling(prev_ptr, st_1[i].first);
+                flag = true;
+              }
+              // internal borrow/merge with right sibling.
+            } else {
+              LOG_INFO("xxx: %d, internal page#%d borrow/merge with right sibling.", i, st_1[i].first->GetPageId());
+              page_id_t next_page_id = st_1[i - 1].first->ValueAt(st_1[i - 1].second + 1);
+              auto next_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
+                  buffer_pool_manager_->FetchPage(next_page_id));
+              if (next_ptr->GetSize() > next_ptr->GetMinSize()) {
+                LOG_INFO("borrow op");
+                BorrowFromRightSibling(st_1[i].first, next_ptr);
+                break;
+              } else {
+                LOG_INFO("merge op");
+                MergedWithRightSibling(st_1[i].first, next_ptr);
+                LogInternalPage(st_1[i].first);
+                flag = false;
               }
             }
-            return;
           }
-          // if ptr_2_leaf achieve it's min size bound.
-          if (ptr_2_leaf->GetNextPageId() != INVALID_PAGE_ID) {
-            // LOG_INFO("find next page, branch 2");
-            auto nxt_page_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(
-                buffer_pool_manager_->FetchPage(ptr_2_leaf->GetNextPageId()));
-
-            // auto left_ptr = reinterpret_cast<BPlusTreePage *>(ptr_2_leaf);
-            // auto right_ptr = reinterpret_cast<BPlusTreePage *>(nxt_page_ptr);
-
-            if (nxt_page_ptr->GetSize() > nxt_page_ptr->GetMinSize()) {
-              // LOG_INFO("next page can borrow");
-              // LogLeafPage(ptr_2_leaf);
-              // this is important.
-              ptr_2_leaf->MoveBackward(i);
-              ptr_2_leaf->IncreaseSize(-1);
-              ptr_2_leaf->SetKeyAt(ptr_2_leaf->GetSize(), nxt_page_ptr->KeyAt(0));
-              ptr_2_leaf->SetValueAt(ptr_2_leaf->GetSize(), nxt_page_ptr->ValueAt(0));
-              ptr_2_leaf->IncreaseSize(1);
-
-              // LogLeafPage(ptr_2_leaf);
-
-              Remove(nxt_page_ptr->KeyAt(0), transaction);
-              return;
-            }
-            // can not borrow, then we merge.
-            // A = ptr_2_leaf->GetMaxSize() + 1. => [0, A / 2), [A / 2, A).
-            /*
-              |----------|      |---|      |-------------|
-              |ptr_2_leaf| ---> |mer| ---> |next_leaf_ptr|
-              |----------|<---- |---|<···· |-------------|
-
-
-              |----------|      |-------------|
-              |ptr_2_leaf| ---> |next_leaf_ptr|
-              |----------|<···· |-------------|
-              `<····` are only conditional.
-            */
-
-            ptr_2_leaf->MoveBackward(i);
-            ptr_2_leaf->IncreaseSize(-1);
-            for (int i = 0; i < nxt_page_ptr->GetSize(); i++) {
-              ptr_2_leaf->SetKeyAt(ptr_2_leaf->GetSize() + i, nxt_page_ptr->KeyAt(i));
-              ptr_2_leaf->SetValueAt(ptr_2_leaf->GetSize() + i, nxt_page_ptr->ValueAt(i));
-            }
-            ptr_2_leaf->IncreaseSize(nxt_page_ptr->GetSize());
-            // set two ptrs.
-            ptr_2_leaf->SetNextPageId(nxt_page_ptr->GetNextPageId());
-            // if (nxt_page_ptr->GetNextPageId() != INVALID_PAGE_ID) {
-            //   auto nnxt_page_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(
-            //       buffer_pool_manager_->FetchPage(ptr_2_leaf->GetNextPageId()));
-            //   nnxt_page_ptr->SetPrevPageId(ptr_2_leaf->GetPageId());
-            // }
-
-            // LogLeafPage(ptr_2_leaf);
-            int a = nxt_page_ptr->GetParentPageId();
-            // LOG_INFO("parents for they: %d, %d", ptr_2_leaf->GetParentPageId(), a);
-            if (ptr_2_leaf->GetParentPageId() != a) {
-              auto tmp = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
-                  buffer_pool_manager_->FetchPage(a));
-              tmp->MoveBackward(0);
-              tmp->IncreaseSize(-1);
-            }
-
-            buffer_pool_manager_->DeletePage(nxt_page_ptr->GetPageId());
-
-            st_1.back().first->MoveBackward(st_1.back().second + 1);
-            st_1.back().first->IncreaseSize(-1);
-            if (st_1.back().first->GetSize() >= st_1.back().first->GetMinSize()) {
-              return;
-            }
-          }
-
-          // if (ptr_2_leaf->GetPrevPageId() != INVALID_PAGE_ID) {
-          //   // LOG_INFO("find prev page, branch 3");
-          //   auto pev_page_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(
-          //       buffer_pool_manager_->FetchPage(ptr_2_leaf->GetPrevPageId()));
-          //   if (pev_page_ptr->GetSize() > pev_page_ptr->GetMinSize()) {
-          //     // LOG_INFO("prev page can borrow");
-          //     ptr_2_leaf->MoveBackward(i);
-          //     ptr_2_leaf->IncreaseSize(-1);
-          //     ptr_2_leaf->MoveForward(0);
-          //     ptr_2_leaf->SetKeyAt(0, pev_page_ptr->KeyAt(pev_page_ptr->GetSize() - 1));
-          //     ptr_2_leaf->SetValueAt(0, pev_page_ptr->ValueAt(pev_page_ptr->GetSize() - 1));
-          //     ptr_2_leaf->IncreaseSize(1);
-          //     // LOG_INFO("fuck!!!!, parent id: %d", st_1.back().first->GetPageId());
-          //     // LOG_INFO("fuck!!!!, key %ld => %ld", st_1.back().first->KeyAt(st_1.back().second).ToString(),
-          //     //          ptr_2_leaf->KeyAt(0).ToString());
-
-          //     Remove(pev_page_ptr->KeyAt(pev_page_ptr->GetSize() - 1), transaction);
-          //     // when borrow from prev
-          //     st_1.back().first->SetKeyAt(st_1.back().second, ptr_2_leaf->KeyAt(0));
-          //     return;
-          //   }
-
-          //   ptr_2_leaf->MoveBackward(i);
-          //   ptr_2_leaf->IncreaseSize(-1);
-          //   int prev_size = pev_page_ptr->GetSize();
-          //   for (int i = 0; i < ptr_2_leaf->GetSize(); i++) {
-          //     pev_page_ptr->SetKeyAt(prev_size + i, ptr_2_leaf->KeyAt(i));
-          //     pev_page_ptr->SetValueAt(prev_size + i, ptr_2_leaf->ValueAt(i));
-          //   }
-          //   pev_page_ptr->IncreaseSize(ptr_2_leaf->GetSize());
-          //   // set 2 ptrs.
-          //   pev_page_ptr->SetNextPageId(ptr_2_leaf->GetNextPageId());
-          //   if (ptr_2_leaf->GetNextPageId() != INVALID_PAGE_ID) {
-          //     auto nxt_page_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(
-          //         buffer_pool_manager_->FetchPage(ptr_2_leaf->GetNextPageId()));
-          //     nxt_page_ptr->SetPrevPageId(pev_page_ptr->GetPageId());
-          //   }
-          //   st_1.back().first->MoveBackward(st_1.back().second);
-          //   st_1.back().first->IncreaseSize(-1);
-          //   return;
-          // }
         }
+        return;
+      }
+
+      if (st_1.back().second < st_1.back().first->GetSize() - 1) {
+        // it should in line with `st_1.back().first->ValueAt(st_1.back().second + 1);`.
+        page_id_t next_page_id = ptr_2_leaf->GetNextPageId();
+        auto next_leaf_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(
+            buffer_pool_manager_->FetchPage(next_page_id));
+
+        if (index_for_key == 0) {
+          KeyType new_leaf_first_key = ptr_2_leaf->KeyAt(0);
+          FirstKeyPopulateUp(new_leaf_first_key, &st_1);
+        }
+
+        // next can "provide" the first one.
+        if (next_leaf_ptr->GetSize() > next_leaf_ptr->GetMinSize()) {
+          KeyType mov_key = next_leaf_ptr->KeyAt(0);
+          ValueType mov_value = next_leaf_ptr->ValueAt(0);
+
+          ptr_2_leaf->SetKeyAt(ptr_2_leaf->GetSize(), mov_key);
+          ptr_2_leaf->SetValueAt(ptr_2_leaf->GetSize(), mov_value);
+          ptr_2_leaf->IncreaseSize(1);
+
+          next_leaf_ptr->MoveBackward(0);
+          next_leaf_ptr->IncreaseSize(-1);
+          KeyType new_key = next_leaf_ptr->KeyAt(0);
+
+          // page_id_t look_up_pid = next_leaf_ptr->GetParentPageId();
+          // auto look_up_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
+          //     buffer_pool_manager_->FetchPage(look_up_pid));
+
+          PopulateUpV2(next_leaf_ptr, mov_key, new_key);
+          return;
+
+          // // update the slot in the direct internal page (parent of the leaf.).
+          // for (int i = 0; i < look_up_ptr->GetSize(); i++) {
+          //   int comp = comparator_(look_up_ptr->KeyAt(i), mov_key);
+          //   if (comp == 0) {
+          //     look_up_ptr->SetKeyAt(i, new_key);
+          //     break;
+          //   }
+          // }
+
+          // // its ancestors can also be updated.
+          // while (comparator_(look_up_ptr->KeyAt(0), new_key) == 0) {
+          //   look_up_pid = look_up_ptr->GetParentPageId();
+          //   if (look_up_pid == INVALID_PAGE_ID) {
+          //     break;
+          //   }
+          //   look_up_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
+          //       buffer_pool_manager_->FetchPage(look_up_pid));
+          //   bool cont = false;
+          //   for (int i = 0; i < look_up_ptr->GetSize(); i++) {
+          //     int comp = comparator_(look_up_ptr->KeyAt(i), mov_key);
+          //     if (comp == 0) {
+          //       look_up_ptr->SetKeyAt(i, new_key);
+          //       if (i == 0) {
+          //         cont = true;
+          //       }
+          //       break;
+          //     }
+          //   }
+          //   if (!cont) {
+          //     break;
+          //   }
+          // }
+          // return;
+        }
+        // merged with next page (next page is merged)?
+        // and set flag as FALSE. if merged with next page toggle to FALSE.
+        MergedWithRightSibling(ptr_2_leaf, next_leaf_ptr);
+        bool flag = false;
+
+        for (int i = st_1.size() - 1; i >= 0; i--) {
+          KeyType old_first_key = st_1[i].first->KeyAt(0);
+          if (flag) {
+            st_1[i].first->MoveBackward(st_1[i].second);
+          } else {
+            st_1[i].first->MoveBackward(st_1[i].second + 1);
+          }
+          st_1[i].first->IncreaseSize(-1);
+          KeyType new_first_key = st_1[i].first->KeyAt(0);
+          PopulateUpV2(st_1[i].first, old_first_key, new_first_key);
+
+          if (st_1[i].first->GetSize() >= st_1[i].first->GetMinSize()) {
+            break;
+          }
+          if (i > 0) {
+            // internal borrow/merge with left sibling.
+            if (st_1[i - 1].second > 0) {
+              LOG_INFO("xxx: %d, internal page#%d borrow/merge with left sibling.", i, st_1[i].first->GetPageId());
+              // the other one is  st_1[i].first.
+              page_id_t prev_page_id = st_1[i - 1].first->ValueAt(st_1[i - 1].second - 1);
+              auto prev_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
+                  buffer_pool_manager_->FetchPage(prev_page_id));
+              if (prev_ptr->GetSize() > prev_ptr->GetMinSize()) {
+                BorrowFromLeftSibling(prev_ptr, st_1[i].first);
+                break;
+              } else {
+                MergedToLeftSibling(prev_ptr, st_1[i].first);
+                flag = true;
+              }
+            } else {
+              LOG_INFO("xxx: %d, internal page#%d borrow/merge with right sibling.", i, st_1[i].first->GetPageId());
+              page_id_t next_page_id = st_1[i - 1].first->ValueAt(st_1[i - 1].second + 1);
+              auto next_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
+                  buffer_pool_manager_->FetchPage(next_page_id));
+              if (next_ptr->GetSize() > next_ptr->GetMinSize()) {
+                LOG_INFO("borrow op");
+                BorrowFromRightSibling(st_1[i].first, next_ptr);
+                break;
+              } else {
+                LOG_INFO("merge op");
+                MergedWithRightSibling(st_1[i].first, next_ptr);
+                LogInternalPage(st_1[i].first);
+                flag = false;
+              }
+            }
+          }
+        }
+        return;
       }
     }
   } while (true);
 }
 
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::BorrowFromLeftSibling(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *prev_page,
+                                           BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *this_page) {
+  KeyType mov_key = prev_page->KeyAt(prev_page->GetSize() - 1);
+  page_id_t mov_value = prev_page->ValueAt(prev_page->GetSize() - 1);
+
+  KeyType old_first_key = this_page->KeyAt(0);
+
+  this_page->MoveForward(0);
+  this_page->SetKeyAt(0, mov_key);
+  this_page->SetValueAt(0, mov_value);
+  this_page->IncreaseSize(1);
+
+  auto tmp = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(mov_value));
+  tmp->SetParentPageId(this_page->GetPageId());
+
+  prev_page->IncreaseSize(-1);
+  KeyType new_first_key = this_page->KeyAt(0);
+
+  PopulateUpV2(this_page, old_first_key, new_first_key);
+  // page_id_t ppid = this_page->GetParentPageId();
+
+  // while (ppid != INVALID_PAGE_ID) {
+  //   auto fuck = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
+  //       buffer_pool_manager_->FetchPage(ppid));
+  //   if (comparator_(fuck->KeyAt(0), old_first_key) == 0) {
+  //     fuck->SetKeyAt(0, new_first_key);
+  //     ppid = fuck->GetParentPageId();
+  //   } else {
+  //     break;
+  //   }
+  // }
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::BorrowFromRightSibling(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *this_page,
+                                            BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *next_page) {
+  KeyType mov_key = next_page->KeyAt(0);
+  page_id_t mov_value = next_page->ValueAt(0);
+
+  this_page->SetKeyAt(this_page->GetSize(), mov_key);
+  this_page->SetValueAt(this_page->GetSize(), mov_value);
+  this_page->IncreaseSize(1);
+
+  auto tmp = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(mov_value));
+  tmp->SetParentPageId(this_page->GetPageId());
+
+  next_page->MoveBackward(0);
+  next_page->IncreaseSize(-1);
+  KeyType new_first_key = next_page->KeyAt(0);
+
+  LOG_INFO("xxxx. move_key: %ld, new_first_key: %ld", mov_key.ToString(), new_first_key.ToString());
+  LogInternalPage(next_page);
+
+  PopulateUpV2(next_page, mov_key, new_first_key);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::PopulateUpV2(BPlusTreePage *this_page, const KeyType &old_first_key,
+                                  const KeyType &new_first_key) {
+  page_id_t ppid = this_page->GetParentPageId();
+  auto fuck = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
+      buffer_pool_manager_->FetchPage(ppid));
+
+  if (ppid != INVALID_PAGE_ID) {
+    for (int i = 0; i < fuck->GetSize(); i++) {
+      if (comparator_(fuck->KeyAt(i), old_first_key) == 0) {
+        fuck->SetKeyAt(i, new_first_key);
+        ppid = fuck->GetParentPageId();
+        break;
+      }
+    }
+  }
+
+  while (ppid != INVALID_PAGE_ID) {
+    fuck = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
+        buffer_pool_manager_->FetchPage(ppid));
+    if (comparator_(fuck->KeyAt(0), old_first_key) == 0) {
+      fuck->SetKeyAt(0, new_first_key);
+      ppid = fuck->GetParentPageId();
+    } else {
+      break;
+    }
+  }
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::MergedToLeftSibling(BPlusTreePage *prev_page, BPlusTreePage *this_page) {
+  /*
+    prev_page ---> this_page ···> next.
+    => prev_page ---> next.
+  */
+  LOG_INFO("merged to left.");
+  int before_size = prev_page->GetSize();
+  if (prev_page->IsLeafPage()) {
+    auto prev_leaf_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(prev_page);
+    auto this_leaf_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(this_page);
+
+    for (int i = 0; i < this_leaf_ptr->GetSize(); i++) {
+      prev_leaf_ptr->SetKeyAt(before_size + i, this_leaf_ptr->KeyAt(i));
+      prev_leaf_ptr->SetValueAt(before_size + i, this_leaf_ptr->ValueAt(i));
+    }
+
+    prev_leaf_ptr->SetNextPageId(this_leaf_ptr->GetNextPageId());
+  } else {
+    // merge a internal page pair?
+    auto prev_int_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(prev_page);
+    auto this_int_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(this_page);
+    page_id_t prev_page_id = prev_page->GetPageId();
+    // for internal page, we need additional work, for its children to "re-point" to the new one.
+    for (int i = 0; i < this_int_ptr->GetSize(); i++) {
+      prev_int_ptr->SetKeyAt(before_size + i, this_int_ptr->KeyAt(i));
+      prev_int_ptr->SetValueAt(before_size + i, this_int_ptr->ValueAt(i));
+
+      BPlusTreePage *tmp = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(this_int_ptr->ValueAt(i)));
+      tmp->SetParentPageId(prev_page_id);
+    }
+
+    page_id_t ppid = prev_page->GetParentPageId();
+    BPlusTreePage *p_ptr = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(ppid));
+    if (GetRootPageId() == ppid && p_ptr->GetSize() == 2) {
+      root_page_id_ = prev_page->GetPageId();
+      prev_page->SetParentPageId(INVALID_PAGE_ID);
+      UpdateRootPageId();
+
+      buffer_pool_manager_->DeletePage(ppid);
+    }
+  }
+
+  prev_page->IncreaseSize(this_page->GetSize());
+  buffer_pool_manager_->DeletePage(this_page->GetPageId());
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::MergedWithRightSibling(BPlusTreePage *this_page, BPlusTreePage *next_page) {
+  /*
+  this_page ---> next_page ···> nnext.
+  => this_page ---> nnext.
+*/
+  LOG_INFO("merged with right: page #%d, page #%d", this_page->GetPageId(), next_page->GetPageId());
+  int before_size = this_page->GetSize();
+  if (this_page->IsLeafPage()) {
+    auto this_leaf_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(this_page);
+    auto next_leaf_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(next_page);
+
+    for (int i = 0; i < next_leaf_ptr->GetSize(); i++) {
+      this_leaf_ptr->SetKeyAt(before_size + i, next_leaf_ptr->KeyAt(i));
+      this_leaf_ptr->SetValueAt(before_size + i, next_leaf_ptr->ValueAt(i));
+    }
+
+    this_leaf_ptr->SetNextPageId(next_leaf_ptr->GetNextPageId());
+  } else {
+    // merge a internal page pair?
+    auto this_int_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(this_page);
+    auto next_int_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(next_page);
+    page_id_t this_page_id = this_page->GetPageId();
+    // for internal page, we need additional work, for its children to "re-point" to the new one.
+    for (int i = 0; i < next_int_ptr->GetSize(); i++) {
+      this_int_ptr->SetKeyAt(before_size + i, next_int_ptr->KeyAt(i));
+      this_int_ptr->SetValueAt(before_size + i, next_int_ptr->ValueAt(i));
+
+      BPlusTreePage *tmp = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(next_int_ptr->ValueAt(i)));
+      tmp->SetParentPageId(this_page_id);
+    }
+
+    page_id_t ppid = this_page->GetParentPageId();
+    BPlusTreePage *p_ptr = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(ppid));
+    if (GetRootPageId() == ppid && p_ptr->GetSize() == 2) {
+      root_page_id_ = this_page->GetPageId();
+      this_page->SetParentPageId(INVALID_PAGE_ID);
+      UpdateRootPageId();
+
+      buffer_pool_manager_->DeletePage(ppid);
+    }
+  }
+
+  this_page->IncreaseSize(next_page->GetSize());
+  buffer_pool_manager_->DeletePage(next_page->GetPageId());
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::FirstKeyPopulateUp(
+    const KeyType &new_key,
+    std::vector<std::pair<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *, int>> *st_1) {
+  size_t populate_index = 0;
+  for (int i = st_1->size() - 1; i >= 0 && populate_index == 0; i--) {
+    (*st_1)[i].first->SetKeyAt((*st_1)[i].second, new_key);
+    populate_index = (*st_1)[i].second;
+  }
+  // while (populate_index == 0 && !st_1->empty()) {
+  //   st_1->back().first->SetKeyAt(st_1->back().second, new_key);
+  //   populate_index = st_1->back().second;
+
+  //   // buffer_pool_manager_->UnpinPage(st_1->back().first->GetPageId(), true);
+  //   st_1->pop_back();
+  // }
+
+  // while (!st_1->empty()) {
+  //   buffer_pool_manager_->UnpinPage(st_1->back().first->GetPageId(), false);
+  //   st_1->pop_back();
+  // }
+}
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::InnerPageMerge(
     const std::vector<std::pair<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *, int>> &st) {
@@ -916,7 +1127,8 @@ void BPLUSTREE_TYPE::InsertInternalCanSplit(
     tmp_value = neww_page_ptr->GetPageId();
     if (i == 0) {
       Page *new_root_ptr = buffer_pool_manager_->NewPage(&root_page_id_);
-      LOG_INFO("update root page id: %d", root_page_id_);
+      LOG_INFO("3update root page id: %d", root_page_id_);
+      UpdateRootPageId();
       (*fuck)[root_page_id_]++;
       auto *new_root_page_ptr =
           reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(new_root_ptr);
@@ -925,6 +1137,7 @@ void BPLUSTREE_TYPE::InsertInternalCanSplit(
       st[i]->SetParentPageId(root_page_id_);
       neww_page_ptr->SetParentPageId(root_page_id_);
 
+      new_root_page_ptr->SetKeyAt(0, st[i]->KeyAt(0));
       new_root_page_ptr->SetValueAt(0, st[i]->GetPageId());
       new_root_page_ptr->SetKeyAt(1, neww_page_ptr->KeyAt(0));
       new_root_page_ptr->SetValueAt(1, neww_page_ptr->GetPageId());

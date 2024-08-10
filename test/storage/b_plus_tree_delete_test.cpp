@@ -59,7 +59,21 @@ TEST(BPlusTreeTests, DeleteTest1) {
       EXPECT_EQ(rids[0].GetSlotNum(), value);
     }
 
-    std::vector<int64_t> remove_keys = {11};
+    std::vector<int64_t> remove_keys = {17};
+    for (auto key : remove_keys) {
+      index_key.SetFromInteger(key);
+      tree.Remove(index_key, transaction);
+    }
+
+    keys = {17};
+    for (auto key : keys) {
+      int64_t value = key & 0xFFFFFFFF;
+      rid.Set(static_cast<int32_t>(key >> 32), value);
+      index_key.SetFromInteger(key);
+      tree.Insert(index_key, rid, transaction);
+    }
+
+    remove_keys = {13, 3, 6, 5, 7, 8, 14, 15, 16, 11, 17};
     for (auto key : remove_keys) {
       index_key.SetFromInteger(key);
       tree.Remove(index_key, transaction);
