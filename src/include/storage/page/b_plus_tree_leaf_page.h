@@ -52,6 +52,7 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   void SetPrevPageId(page_id_t prev_page_id);
   auto KeyAt(int index) const -> KeyType;
   auto ValueAt(int index) const -> ValueType;
+  auto KVAt(int index) const -> const std::pair<KeyType, ValueType> &;
   void SetKeyAt(int index, const KeyType &key);
   void SetValueAt(int index, const ValueType &value);
   void MoveForward(int index);

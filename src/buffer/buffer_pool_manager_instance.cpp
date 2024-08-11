@@ -75,7 +75,7 @@ auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
   */
   *page_id = AllocatePage();
 
-  LOG_INFO("new a page with `NewPgImp`. new page id: %d. frame id %d", *page_id, new_frame_id);
+  // LOG_INFO("new a page with `NewPgImp`. new page id: %d. frame id %d", *page_id, new_frame_id);
   pages_[new_frame_id].ResetMemory();
   pages_[new_frame_id].page_id_ = *page_id;
   pages_[new_frame_id].pin_count_ = 1;

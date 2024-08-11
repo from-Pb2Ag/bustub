@@ -111,6 +111,8 @@ class BPlusTree {
   void UnpinPages(const std::unordered_map<page_id_t, bool> &unpin_is_dirty,
                   const std::unordered_map<page_id_t, size_t> &fuck);
 
+  // find the first index >= key.
+  auto BinarySearch(const KeyType &key, BPlusTreeLeafPage<KeyType, RID, KeyComparator> *page_ptr) -> int;
   /*
     if a page (no matter leaf or internal) updates its key in slot #0,
     it will populate through its ancestors (and stop conditionally).
