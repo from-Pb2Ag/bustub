@@ -79,6 +79,8 @@ class BPlusTree {
   // read data from file and remove one by one
   void RemoveFromFile(const std::string &file_name, Transaction *transaction = nullptr);
 
+  void PrintGraphUtil();
+
  private:
   void UpdateRootPageId(int insert_record = 0);
 
@@ -151,6 +153,8 @@ class BPlusTree {
 
   void ToString(BPlusTreePage *page, BufferPoolManager *bpm) const;
 
+  void UnlatchRootPage();
+
   // member variable
   std::string index_name_;
   page_id_t root_page_id_;
@@ -162,7 +166,7 @@ class BPlusTree {
   std::atomic<bool> is_empty_;
   // double-check guard the is_empty_.
   std::mutex mux_;
-  std::atomic<bool> root_locked_;
+  std::atomic<size_t> root_locked_;
   std::condition_variable c_v_;
   // how many remain buffer pool page frames?
   std::atomic<size_t> rem_cnt_;
@@ -170,6 +174,7 @@ class BPlusTree {
   std::atomic<size_t> cur_height_;
   std::condition_variable buffer_pool_page_quota_;
 
+  enum class RootLockType : size_t { UN_LOCKED = 0, READ_LOCKED = 1, WRITE_LOCKED = 1 << 1 };
   class FinalAction {
    public:
     explicit FinalAction(BPlusTree<KeyType, ValueType, KeyComparator> *tree) : tree_(tree), active_(true) {}

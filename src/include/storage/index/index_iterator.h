@@ -27,7 +27,7 @@ class IndexIterator {
   // you may define your own constructor based on your member variables
   IndexIterator();
   explicit IndexIterator(BufferPoolManager *mng, BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *ptr,
-                         size_t offset = 0);
+                         size_t offset = 0, size_t this_quota = 0, std::atomic<size_t> *ret_to = nullptr);
   ~IndexIterator();  // NOLINT
 
   auto IsEnd() const -> bool;
@@ -47,6 +47,8 @@ class IndexIterator {
   std::atomic<bool> end_flag_;
   // we have to have access to this page manager.
   BufferPoolManager *buffer_pool_manager_;
+  std::atomic<size_t> this_quota_;
+  std::atomic<size_t> *ret_to_;
 };
 
 }  // namespace bustub

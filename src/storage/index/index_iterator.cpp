@@ -13,15 +13,23 @@ namespace bustub {
  */
 INDEX_TEMPLATE_ARGUMENTS
 // INDEXITERATOR_TYPE::IndexIterator() = default;
-INDEXITERATOR_TYPE::IndexIterator() : cur_leaf_page_ptr_(nullptr), cur_offset_(0), end_flag_(true) {}
+INDEXITERATOR_TYPE::IndexIterator() : cur_leaf_page_ptr_(nullptr), cur_offset_(0), end_flag_(true), ret_to_(nullptr) {}
 
 INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::IndexIterator(BufferPoolManager *mng, BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *ptr,
-                                  size_t offset)
-    : cur_leaf_page_ptr_(ptr), cur_offset_(offset), end_flag_(false), buffer_pool_manager_(mng) {}
+                                  size_t offset, size_t this_quota, std::atomic<size_t> *ret_to)
+    : cur_leaf_page_ptr_(ptr), cur_offset_(offset), end_flag_(false), buffer_pool_manager_(mng), ret_to_(ret_to) {
+  this_quota_.store(this_quota);
+}
 
 INDEX_TEMPLATE_ARGUMENTS
-INDEXITERATOR_TYPE::~IndexIterator() = default;  // NOLINT
+// INDEXITERATOR_TYPE::~IndexIterator() = default;  // NOLINT
+INDEXITERATOR_TYPE::~IndexIterator() {
+  if (ret_to_ != nullptr) {
+    LOG_INFO("return %ld pages to buffer pool.", this_quota_.load());
+    ret_to_->fetch_add(this_quota_.load());
+  }
+}
 
 INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::IsEnd() const -> bool {
@@ -46,6 +54,7 @@ auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
   size_t offset_value = cur_offset_.load(std::memory_order_seq_cst);
   if (offset_value >= static_cast<size_t>(cur_leaf_page_ptr_->GetSize())) {
     page_id_t next_page_id = cur_leaf_page_ptr_->GetNextPageId();
+    reinterpret_cast<Page *>(cur_leaf_page_ptr_)->RUnlatch();
     buffer_pool_manager_->UnpinPage(cur_leaf_page_ptr_->GetPageId(), false);
 
     if (next_page_id == INVALID_PAGE_ID) {
@@ -54,6 +63,7 @@ auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
       // a new leaf page?
       cur_leaf_page_ptr_ = reinterpret_cast<BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *>(
           buffer_pool_manager_->FetchPage(next_page_id));
+      reinterpret_cast<Page *>(cur_leaf_page_ptr_)->RLatch();
       cur_offset_.store(0, std::memory_order_seq_cst);
     }
   }

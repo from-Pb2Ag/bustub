@@ -7,7 +7,7 @@
 #include "storage/page/header_page.h"
 
 namespace bustub {
-std::vector<std::string> GenerateNRandomString(int n);
+auto GenerateNRandomString(int n) -> std::vector<std::string>;
 
 INDEX_TEMPLATE_ARGUMENTS
 BPLUSTREE_TYPE::BPlusTree(std::string name, BufferPoolManager *buffer_pool_manager, const KeyComparator &comparator,
@@ -20,7 +20,7 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, BufferPoolManager *buffer_pool_manag
       internal_max_size_(internal_max_size) {
   op_id_ = 0;
   is_empty_.store(true);
-  root_locked_.store(false);
+  root_locked_.store(static_cast<size_t>(RootLockType::UN_LOCKED));
   rem_cnt_.store(buffer_pool_manager->GetPoolSize());
   cur_height_.store(0);
   LOG_INFO("create a new B+ tree. leaf_max_size: %d, internal_max_size: %d. pool size: %ld.", leaf_max_size_,
@@ -147,9 +147,9 @@ auto BPLUSTREE_TYPE::BinarySearch(const KeyType &key, BPlusTreeLeafPage<KeyType,
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transaction *transaction) -> bool {
-  // LOG_INFO("attempts insert kv: %ld. cur depth: %ld", key.ToString(), cur_height_.load());
   auto signatures = GenerateNRandomString(1);
   std::string signature = signatures[0];
+  LOG_INFO("[%s]: attempts insert kv: %ld. cur depth: %ld", signature.c_str(), key.ToString(), cur_height_.load());
 
   if (IsEmpty()) {
     std::lock_guard<std::mutex> lock(mux_);
@@ -159,7 +159,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
       Page *ptr = reinterpret_cast<Page *>(ptr_2_leaf);
       ptr->WLatch();
       // LOG_INFO("page#%d latch.", ptr->GetPageId());
-      root_locked_.store(true);
+      root_locked_.store(static_cast<size_t>(RootLockType::WRITE_LOCKED));
       UpdateRootPageId();
 
       // LOG_INFO("1update root page id: %d", root_page_id_);
@@ -172,13 +172,13 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
       ptr_2_leaf->SetNextPageId(INVALID_PAGE_ID);
 
       // LogLeafPage(ptr_2_leaf);
-      root_locked_.store(false);
+      root_locked_.store(static_cast<size_t>(RootLockType::UN_LOCKED));
       cur_height_.fetch_add(1);
       // LOG_INFO("page#%d un-latch.", ptr->GetPageId());
       ptr->WUnlatch();
       buffer_pool_manager_->UnpinPage(root_page_id_, true);
       is_empty_.store(false);
-      // LOG_INFO("attempts insert kv: %ld. ok1.", key.ToString());
+      LOG_INFO("[%s]: attempts insert kv: %ld. success path 1.", signature.c_str(), key.ToString());
       return true;
     }
   }
@@ -199,23 +199,25 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   do {
     std::unique_lock<std::mutex> lock(mux_);
     while (rem_cnt_.load() < prime_quota) {
+      LOG_INFO("[%s]: buffer pool is stained, sleep.", signature.c_str());
       buffer_pool_page_quota_.wait(lock);
     }
 
     rem_cnt_.fetch_sub(prime_quota);
+    LOG_INFO("[%s]: buffer get buffer pool reserve.", signature.c_str());
     break;
   } while (true);
 
   do {
     std::unique_lock<std::mutex> lock(mux_);
-    while (root_locked_.load()) {
-      // LOG_INFO("[%s]: attempts insert kv: %ld. sleep.", signature.c_str(), key.ToString());
+    while (root_locked_.load() != static_cast<size_t>(RootLockType::UN_LOCKED)) {
+      LOG_INFO("[%s]: root page is locked, sleep.", signature.c_str());
       c_v_.wait(lock);
     }
 
-    root_locked_.store(true);
+    root_locked_.store(static_cast<size_t>(RootLockType::WRITE_LOCKED));
 
-    if (auto it = cached_ptr.find(root_locked_); it != cached_ptr.end()) {
+    if (auto it = cached_ptr.find(root_page_id_); it != cached_ptr.end()) {
       ptr = it->second;
     } else {
       ptr = buffer_pool_manager_->FetchPage(root_page_id_);
@@ -229,6 +231,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     // if (op_id_ < 40) {
     //   FinalAction final_action(this);
     // }
+    LOG_INFO("[%s]: acquire root page W-latch.", signature.c_str());
     break;
   } while (true);
 
@@ -250,10 +253,9 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   do {
     cur_bpluspage_ptr = reinterpret_cast<BPlusTreePage *>(ptr);
     if (!cur_bpluspage_ptr->IsLeafPage()) {
-      // LOG_INFO("[%s]: op #%d attempts insert kv: %ld. ????", signature.c_str(), op_id_, key.ToString());
       ptr_2_internal = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(cur_bpluspage_ptr);
       st.push_back(ptr_2_internal);
-      // LogInternalPage(ptr_2_internal);
+
       auto ret = FindFirstInfIndex(key, ptr_2_internal);
       // LOG_INFO("ret: %d, %d", ret.first, ret.second);
       // already existing (in internal page, fast path).
@@ -261,10 +263,11 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
         for (size_t i = next_unlock_idx; i < st.size(); i++) {
           Page *damn = reinterpret_cast<Page *>(st[i]);
           if (i == 0) {
-            mux_.lock();
-            root_locked_.store(false);
-            c_v_.notify_one();
-            mux_.unlock();
+            // mux_.lock();
+            // root_locked_.store(false);
+            // c_v_.notify_one();
+            // mux_.unlock();
+            UnlatchRootPage();
           }
           damn->WUnlatch();
         }
@@ -273,6 +276,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
         rem_cnt_.fetch_add(prime_quota);
         buffer_pool_page_quota_.notify_one();
 
+        LOG_INFO("[%s]: attempts insert kv: %ld. fail path 1.", signature.c_str(), key.ToString());
         return false;
       }
 
@@ -301,10 +305,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
           Page *damn = reinterpret_cast<Page *>(st[i]);
           // page_id_t damn_pid = damn->GetPageId();
           if (i == 0) {
-            mux_.lock();
-            root_locked_.store(false);
-            c_v_.notify_one();
-            mux_.unlock();
+            UnlatchRootPage();
           }
 
           damn->WUnlatch();
@@ -338,20 +339,24 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
       for (size_t i = next_unlock_idx; i < st.size(); i++) {
         Page *damn = reinterpret_cast<Page *>(st[i]);
         if (i == 0) {
-          mux_.lock();
-          root_locked_.store(false);
-          c_v_.notify_one();
-          mux_.unlock();
+          UnlatchRootPage();
         }
         damn->WUnlatch();
       }
-      // un-latch leaf page individually.
+      /*
+        un-latch leaf page individually.
+        what happens if the leaf page is ALSO the root?
+      */
+      if (st.empty()) {
+        UnlatchRootPage();
+      }
       ptr->WUnlatch();
       UnpinPages(unpin_coll, signature);
 
       rem_cnt_.fetch_add(prime_quota);
       buffer_pool_page_quota_.notify_one();
 
+      LOG_INFO("[%s]: attempts insert kv: %ld. fail path 2.", signature.c_str(), key.ToString());
       return false;
     }
 
@@ -363,10 +368,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
       for (size_t i = next_unlock_idx; i < st.size(); i++) {
         Page *damn = reinterpret_cast<Page *>(st[i]);
         if (i == 0) {
-          mux_.lock();
-          root_locked_.store(false);
-          c_v_.notify_one();
-          mux_.unlock();
+          UnlatchRootPage();
         }
 
         damn->WUnlatch();
@@ -396,11 +398,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
       ptr_2_leaf->SetValueAt(ret.first, value);
       ptr_2_leaf->IncreaseSize(1);
       if (ptr_2_leaf->GetParentPageId() == INVALID_PAGE_ID) {
-        mux_.lock();
-        root_locked_.store(false);
-        // LOG_INFO("[%s]: attempts insert kv: %ld. ok2, wtf", signature.c_str(), key.ToString());
-        c_v_.notify_one();
-        mux_.unlock();
+        UnlatchRootPage();
       }
       // LOG_INFO("[%s]: page#%d un-latch.", signature.c_str(), ptr->GetPageId());
       ptr->WUnlatch();
@@ -410,6 +408,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
       rem_cnt_.fetch_add(prime_quota);
       buffer_pool_page_quota_.notify_one();
 
+      LOG_INFO("[%s]: attempts insert kv: %ld. success path 2.", signature.c_str(), key.ToString());
       return true;
     }
     // A = ptr_2_leaf->GetMaxSize() + 1. => [0, A / 2), [A / 2, A).
@@ -520,22 +519,14 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
       for (size_t i = next_unlock_idx; i < st.size(); i++) {
         Page *damn = reinterpret_cast<Page *>(st[i]);
         if (i == 0) {
-          mux_.lock();
-          root_locked_.store(false);
-          // LOG_INFO("[%s]: attempts insert kv: %ld. ok3, wtf", signature.c_str(), key.ToString());
-          c_v_.notify_one();
-          mux_.unlock();
+          UnlatchRootPage();
         }
         // LOG_INFO("[%s]: page#%d un-latch.", signature.c_str(), damn->GetPageId());
         damn->WUnlatch();
       }
 
-      if (st.size() == 0) {
-        mux_.lock();
-        root_locked_.store(false);
-        // LOG_INFO("[%s]: attempts insert kv: %ld. ok3, wtf", signature.c_str(), key.ToString());
-        c_v_.notify_one();
-        mux_.unlock();
+      if (st.empty()) {
+        UnlatchRootPage();
       }
       // LOG_INFO("[%s]: page#%d un-latch.", signature.c_str(), ptr->GetPageId());
       ptr->WUnlatch();
@@ -545,6 +536,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
       rem_cnt_.fetch_add(prime_quota);
       buffer_pool_page_quota_.notify_one();
 
+      LOG_INFO("[%s]: attempts insert kv: %ld. success path 3.", signature.c_str(), key.ToString());
       return true;
     }
     // !!!!
@@ -554,10 +546,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     for (size_t i = next_unlock_idx; i < st.size(); i++) {
       Page *damn = reinterpret_cast<Page *>(st[i]);
       if (i == 0) {
-        mux_.lock();
-        root_locked_.store(false);
-        c_v_.notify_one();
-        mux_.unlock();
+        UnlatchRootPage();
       }
       // LOG_INFO("[%s]: page#%d un-latch.", signature.c_str(), damn->GetPageId());
       damn->WUnlatch();
@@ -571,16 +560,14 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     rem_cnt_.fetch_add(prime_quota);
     buffer_pool_page_quota_.notify_one();
 
+    LOG_INFO("[%s]: attempts insert kv: %ld. success path 4.", signature.c_str(), key.ToString());
     return true;
   } while (true);
 
   for (size_t i = next_unlock_idx; i < st.size(); i++) {
     Page *damn = reinterpret_cast<Page *>(st[i]);
     if (i == 0) {
-      mux_.lock();
-      root_locked_.store(false);
-      c_v_.notify_one();
-      mux_.unlock();
+      UnlatchRootPage();
     }
     // LOG_INFO("[%s]: page#%d un-latch.", signature.c_str(), damn->GetPageId());
     damn->WUnlatch();
@@ -593,6 +580,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   rem_cnt_.fetch_add(prime_quota);
   buffer_pool_page_quota_.notify_one();
 
+  LOG_INFO("[%s]: attempts insert kv: %ld. fail path 3.", signature.c_str(), key.ToString());
   return false;
 }
 
@@ -691,35 +679,97 @@ void BPLUSTREE_TYPE::UnpinPages(const std::unordered_map<page_id_t, Page *> &unp
  */
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
-  LOG_INFO("attempts remove k:  %ld", key.ToString());
+  auto signatures = GenerateNRandomString(1);
+  std::string signature = signatures[0];
+  LOG_INFO("attempts remove k:  %ld. rem quota: %ld", key.ToString(), rem_cnt_.load());
   // op_id_++;
   // FinalAction final_action(this);
   // final_action.Deactivate();
 
   if (IsEmpty()) {
+    LOG_INFO("empty remove path 1.");
     return;
   }
-  Page *ptr = buffer_pool_manager_->FetchPage(root_page_id_);
-  std::vector<std::pair<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *, int>> st_1;
+
+  std::unordered_map<page_id_t, Page *> cached_ptr;
+  std::unordered_map<page_id_t, Page *> unpin_coll;
+  Page *ptr = nullptr;
+
+  std::atomic<size_t> prime_quota = 2 * (cur_height_.load() + 1);
   do {
-    auto *tmp_ptr = reinterpret_cast<BPlusTreePage *>(ptr);
+    std::unique_lock<std::mutex> lock(mux_);
+    while (rem_cnt_.load() < prime_quota) {
+      LOG_INFO("[%s]: buffer pool is stained, sleep.", signature.c_str());
+      buffer_pool_page_quota_.wait(lock);
+    }
+
+    rem_cnt_.fetch_sub(prime_quota);
+    LOG_INFO("[%s]: buffer get buffer pool reserve.", signature.c_str());
+    break;
+  } while (true);
+
+  do {
+    std::unique_lock<std::mutex> lock(mux_);
+    while (root_locked_.load() != static_cast<size_t>(RootLockType::UN_LOCKED)) {
+      LOG_INFO("[%s]: root page is locked, sleep.", signature.c_str());
+      c_v_.wait(lock);
+    }
+
+    root_locked_.store(static_cast<size_t>(RootLockType::WRITE_LOCKED));
+
+    if (auto it = cached_ptr.find(root_page_id_); it != cached_ptr.end()) {
+      ptr = it->second;
+    } else {
+      ptr = buffer_pool_manager_->FetchPage(root_page_id_);
+      cached_ptr.insert({root_page_id_, ptr});
+      unpin_coll.insert({root_page_id_, ptr});
+    }
+
+    ptr->WLatch();
+    break;
+  } while (true);
+
+  std::vector<std::pair<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *, int>> st_1;
+  size_t next_unlock_idx = 0;
+
+  BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *ptr_2_internal = nullptr;
+  BPlusTreePage *tmp_ptr = nullptr;
+
+  do {
+    tmp_ptr = reinterpret_cast<BPlusTreePage *>(ptr);
 
     // LOG_INFO("page id: %d", ptr->GetPageId());
     if (!tmp_ptr->IsLeafPage()) {
-      auto ptr_2_internal = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(ptr);
+      ptr_2_internal = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(ptr);
       auto ret = FindFirstInfIndex(key, ptr_2_internal);
-      ptr = buffer_pool_manager_->FetchPage(ptr_2_internal->ValueAt(ret.first));
       st_1.push_back({ptr_2_internal, ret.first});
-      // LogInternalPage(ptr_2_internal);
+
+      page_id_t nxt_level_page = ptr_2_internal->ValueAt(ret.first);
+
+      if (auto it = cached_ptr.find(nxt_level_page); it != cached_ptr.end()) {
+        ptr = it->second;
+      } else {
+        ptr = buffer_pool_manager_->FetchPage(nxt_level_page);
+        cached_ptr.insert({nxt_level_page, ptr});
+        unpin_coll.insert({nxt_level_page, ptr});
+      }
+
+      ptr->WLatch();
+
+      auto peek_ptr = reinterpret_cast<BPlusTreePage *>(ptr);
+      if (peek_ptr->GetSize() > peek_ptr->GetMinSize()) {
+        for (size_t i = next_unlock_idx; i < st_1.size(); i++) {
+          Page *damn = reinterpret_cast<Page *>(st_1[i].first);
+          if (i == 0) {
+            UnlatchRootPage();
+          }
+
+          damn->WUnlatch();
+        }
+        next_unlock_idx = st_1.size();
+      }
     } else {
       auto ptr_2_leaf = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(ptr);
-      // LogLeafPage(ptr_2_leaf);
-
-      // LOG_INFO("++++stack trace begin++++");
-      // for (const auto &[a, b] : st_1) {
-      //   LOG_INFO("page id: %d, index: %d", a->GetPageId(), b);
-      // }
-      // LOG_INFO("++++stack trace end++++++");
 
       size_t index_for_key = 0;
       bool find = false;
@@ -729,18 +779,25 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
         index_for_key = dst_index;
         find = true;
       }
-      // for (int i = 0; i < ptr_2_leaf->GetSize(); i++) {
-      //   int comp = comparator_(key, ptr_2_leaf->KeyAt(i));
-      //   if (comp <= 0) {
-      //     if (comp == 0) {
-      //       index_for_key = i;
-      //       find = true;
-      //     }
-      //     break;
-      //   }
-      // }
 
       if (!find) {
+        for (size_t i = next_unlock_idx; i < st_1.size(); i++) {
+          Page *damn = reinterpret_cast<Page *>(st_1[i].first);
+          if (i == 0) {
+            UnlatchRootPage();
+          }
+          damn->WUnlatch();
+        }
+        if (st_1.empty()) {
+          UnlatchRootPage();
+        }
+        ptr->WUnlatch();
+        UnpinPages(unpin_coll, signature);
+
+        rem_cnt_.fetch_add(prime_quota);
+        buffer_pool_page_quota_.notify_one();
+
+        LOG_INFO("not found remove path 1.");
         return;
       }
 
@@ -757,18 +814,46 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
 
         size_t populate_index = index_for_key;
         KeyType new_leaf_first_key = ptr_2_leaf->KeyAt(0);
-        while (populate_index == 0 && !st_1.empty()) {
-          st_1.back().first->SetKeyAt(st_1.back().second, new_leaf_first_key);
-          populate_index = st_1.back().second;
-          st_1.pop_back();
+        for (int i = st_1.size() - 1; i >= 0 && populate_index == 0; i--) {
+          st_1[i].first->SetKeyAt(st_1[i].second, new_leaf_first_key);
+          populate_index = st_1[i].second;
         }
+        for (size_t i = next_unlock_idx; i < st_1.size(); i++) {
+          Page *damn = reinterpret_cast<Page *>(st_1[i].first);
+          if (i == 0) {
+            UnlatchRootPage();
+          }
+          damn->WUnlatch();
+        }
+
+        if (st_1.empty()) {
+          UnlatchRootPage();
+        }
+        ptr->WUnlatch();
+        UnpinPages(unpin_coll, signature);
+
+        rem_cnt_.fetch_add(prime_quota);
+        buffer_pool_page_quota_.notify_one();
+
+        LOG_INFO("find remove path 1.");
         return;
       }
 
       if (st_1.back().second > 0) {
         page_id_t prev_page_id = st_1.back().first->ValueAt(st_1.back().second - 1);
-        auto prev_leaf_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(
-            buffer_pool_manager_->FetchPage(prev_page_id));
+        Page *prev_ptr = nullptr;
+        BPlusTreeLeafPage<KeyType, RID, KeyComparator> *prev_leaf_ptr = nullptr;
+
+        if (auto it = cached_ptr.find(prev_page_id); it != cached_ptr.end()) {
+          prev_ptr = it->second;
+        } else {
+          prev_ptr = buffer_pool_manager_->FetchPage(prev_page_id);
+          prev_leaf_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(prev_ptr);
+          cached_ptr.insert({prev_page_id, prev_ptr});
+          unpin_coll.insert({prev_page_id, prev_ptr});
+        }
+
+        prev_ptr->WLatch();
 
         // prev can "provide" the last one.
         // ptr_2_leaf page using it as the new first key (and look up.).
@@ -785,6 +870,26 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
 
           KeyType new_leaf_first_key = ptr_2_leaf->KeyAt(0);
           FirstKeyPopulateUp(new_leaf_first_key, &st_1);
+
+          for (size_t i = next_unlock_idx; i < st_1.size(); i++) {
+            Page *damn = reinterpret_cast<Page *>(st_1[i].first);
+            if (i == 0) {
+              UnlatchRootPage();
+            }
+            damn->WUnlatch();
+          }
+
+          if (st_1.empty()) {
+            UnlatchRootPage();
+          }
+          prev_ptr->WUnlatch();
+          ptr->WUnlatch();
+          UnpinPages(unpin_coll, signature);
+
+          rem_cnt_.fetch_add(prime_quota);
+          buffer_pool_page_quota_.notify_one();
+
+          LOG_INFO("find remove path 2.");
           return;
         }
 
@@ -850,6 +955,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
             }
           }
         }
+        LOG_INFO("find remove path 3.");
         return;
       }
 
@@ -878,6 +984,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
           KeyType new_key = next_leaf_ptr->KeyAt(0);
 
           PopulateUpV2(next_leaf_ptr, mov_key, new_key);
+          LOG_INFO("find remove path 4.");
           return;
         }
         // merged with next page (next page is merged)?
@@ -926,6 +1033,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
             }
           }
         }
+        LOG_INFO("find remove path 5.");
         return;
       }
     }
@@ -1056,21 +1164,38 @@ void BPLUSTREE_TYPE::MergedToLeftSibling(BPlusTreePage *prev_page, BPlusTreePage
       prev_int_ptr->SetValueAt(before_size + i, this_int_ptr->ValueAt(i));
 
       auto *tmp = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(this_int_ptr->ValueAt(i)));
+      Page *tmp1 = reinterpret_cast<Page *>(tmp);
+      tmp1->WLatch();
       tmp->SetParentPageId(prev_page_id);
+      tmp1->WUnlatch();
+      buffer_pool_manager_->UnpinPage(tmp->GetPageId(), true);
     }
 
     page_id_t ppid = prev_page->GetParentPageId();
     auto *p_ptr = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(ppid));
+    Page *p_page_ptr = reinterpret_cast<Page *>(p_ptr);
     if (GetRootPageId() == ppid && p_ptr->GetSize() == 2) {
       root_page_id_ = prev_page->GetPageId();
       prev_page->SetParentPageId(INVALID_PAGE_ID);
       UpdateRootPageId();
 
+      while (p_page_ptr->GetPinCount() > 0) {
+        buffer_pool_manager_->UnpinPage(ppid, false);
+      }
+      p_page_ptr->WUnlatch();
+
       buffer_pool_manager_->DeletePage(ppid);
+    } else {
+      buffer_pool_manager_->UnpinPage(ppid, false);
     }
   }
 
   prev_page->IncreaseSize(this_page->GetSize());
+  Page *this_page_ptr = reinterpret_cast<Page *>(this_page);
+  while (this_page_ptr->GetPinCount() > 0) {
+    buffer_pool_manager_->UnpinPage(this_page->GetPageId(), false);
+  }
+  this_page_ptr->WUnlatch();
   buffer_pool_manager_->DeletePage(this_page->GetPageId());
 }
 
@@ -1102,21 +1227,38 @@ void BPLUSTREE_TYPE::MergedWithRightSibling(BPlusTreePage *this_page, BPlusTreeP
       this_int_ptr->SetValueAt(before_size + i, next_int_ptr->ValueAt(i));
 
       auto *tmp = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(next_int_ptr->ValueAt(i)));
+      Page *tmp1 = reinterpret_cast<Page *>(tmp);
+      tmp1->WLatch();
       tmp->SetParentPageId(this_page_id);
+      tmp1->WUnlatch();
+      buffer_pool_manager_->UnpinPage(tmp->GetPageId(), true);
     }
 
     page_id_t ppid = this_page->GetParentPageId();
     auto *p_ptr = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(ppid));
+    Page *p_page_ptr = reinterpret_cast<Page *>(p_ptr);
     if (GetRootPageId() == ppid && p_ptr->GetSize() == 2) {
       root_page_id_ = this_page->GetPageId();
       this_page->SetParentPageId(INVALID_PAGE_ID);
       UpdateRootPageId();
 
+      while (p_page_ptr->GetPinCount() > 0) {
+        buffer_pool_manager_->UnpinPage(ppid, false);
+      }
+      p_page_ptr->WUnlatch();
+
       buffer_pool_manager_->DeletePage(ppid);
+    } else {
+      buffer_pool_manager_->UnpinPage(ppid, false);
     }
   }
 
   this_page->IncreaseSize(next_page->GetSize());
+  Page *next_page_ptr = reinterpret_cast<Page *>(next_page);
+  while (next_page_ptr->GetPinCount() > 0) {
+    buffer_pool_manager_->UnpinPage(next_page->GetPageId(), false);
+  }
+  next_page_ptr->WUnlatch();
   buffer_pool_manager_->DeletePage(next_page->GetPageId());
 }
 
@@ -1166,16 +1308,50 @@ void BPLUSTREE_TYPE::InnerPageMerge(
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
-  auto tmp = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(root_page_id_));
+  Page *ptr = nullptr;
+  std::atomic<size_t> prime_quota = 2;
+
+  do {
+    std::unique_lock<std::mutex> lock(mux_);
+    while (rem_cnt_.load() < prime_quota) {
+      buffer_pool_page_quota_.wait(lock);
+    }
+
+    rem_cnt_.fetch_sub(prime_quota);
+    break;
+  } while (true);
+
+  ptr = buffer_pool_manager_->FetchPage(root_page_id_);
+  ptr->RLatch();
+
+  // do {
+  //   std::unique_lock<std::mutex> lock(mux_);
+  //   while (root_locked_.load()) {
+  //     c_v_.wait(lock);
+  //   }
+
+  //   ptr = buffer_pool_manager_->FetchPage(root_page_id_);
+  //   ptr->RLatch();
+  // } while (true);
+
+  auto tmp = reinterpret_cast<BPlusTreePage *>(ptr);
   while (!tmp->IsLeafPage()) {
     auto fuck = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(tmp);
     tmp = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(fuck->ValueAt(0)));
+    reinterpret_cast<Page *>(tmp)->RLatch();
+    reinterpret_cast<Page *>(fuck)->RUnlatch();
+
     buffer_pool_manager_->UnpinPage(fuck->GetPageId(), false);
   }
   LOG_INFO("case 1 now first page");
+  LogLeafPage(reinterpret_cast<BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *>(tmp));
+
+  auto fuck = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(tmp);
+  reinterpret_cast<Page *>(tmp)->RUnlatch();
+  buffer_pool_manager_->UnpinPage(tmp->GetPageId(), false);
+  // rem_cnt_.fetch_add(prime_quota);
   // BPlusTreeLeafPage<KeyType, RID, KeyComparator> *
-  return INDEXITERATOR_TYPE(buffer_pool_manager_,
-                            reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(tmp));
+  return INDEXITERATOR_TYPE(buffer_pool_manager_, fuck, 0, prime_quota.load(), &rem_cnt_);
   // return INDEXITERATOR_TYPE();
 }
 
@@ -1186,11 +1362,30 @@ auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
+  Page *ptr = nullptr;
+  std::atomic<size_t> prime_quota = 2;
+
+  do {
+    std::unique_lock<std::mutex> lock(mux_);
+    while (rem_cnt_.load() < prime_quota) {
+      buffer_pool_page_quota_.wait(lock);
+    }
+
+    rem_cnt_.fetch_sub(prime_quota);
+    break;
+  } while (true);
+
+  ptr = buffer_pool_manager_->FetchPage(root_page_id_);
+  ptr->RLatch();
+
   auto tmp = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(root_page_id_));
   while (!tmp->IsLeafPage()) {
     auto fuck = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(tmp);
     auto ret = FindFirstInfIndex(key, fuck);
     tmp = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(fuck->ValueAt(ret.first)));
+    reinterpret_cast<Page *>(tmp)->RLatch();
+    reinterpret_cast<Page *>(fuck)->RUnlatch();
+
     buffer_pool_manager_->UnpinPage(fuck->GetPageId(), false);
   }
 
@@ -1202,8 +1397,10 @@ auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
     LOG_INFO("WTF??? key: %ld", key.ToString());
   }
 
-  return INDEXITERATOR_TYPE(buffer_pool_manager_,
-                            reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(tmp), index);
+  reinterpret_cast<Page *>(tmp)->RUnlatch();
+  buffer_pool_manager_->UnpinPage(tmp->GetPageId(), false);
+  // rem_cnt_.fetch_add(prime_quota);
+  return INDEXITERATOR_TYPE(buffer_pool_manager_, fuck, index, prime_quota.load(), &rem_cnt_);
   // return INDEXITERATOR_TYPE();
 }
 
@@ -1520,6 +1717,9 @@ void BPLUSTREE_TYPE::RemoveFromFile(const std::string &file_name, Transaction *t
   }
 }
 
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::PrintGraphUtil() { FinalAction final_action(this); }
+
 /**
  * This method is used for debug only, You don't need to modify
  */
@@ -1675,12 +1875,20 @@ void BPLUSTREE_TYPE::ToString(BPlusTreePage *page, BufferPoolManager *bpm) const
   bpm->UnpinPage(page->GetPageId(), false);
 }
 
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::UnlatchRootPage() {
+  mux_.lock();
+  root_locked_.store(static_cast<size_t>(RootLockType::UN_LOCKED));
+  c_v_.notify_one();
+  mux_.unlock();
+}
+
 // Generate n random strings
-std::vector<std::string> GenerateNRandomString(int n) {
+auto GenerateNRandomString(int n) -> std::vector<std::string> {
   std::random_device rd;
   std::mt19937 gen(rd());
   std::uniform_int_distribution<char> char_dist('A', 'z');
-  std::uniform_int_distribution<int> len_dist(1, 30);
+  std::uniform_int_distribution<int> len_dist(6, 8);
 
   std::vector<std::string> rand_strs(n);
 
