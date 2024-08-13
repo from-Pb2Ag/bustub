@@ -12,6 +12,7 @@
 
 #include <iomanip>
 #include <queue>
+#include <random>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -103,13 +104,17 @@ class BPlusTree {
   void InsertInternalCanSplit(const std::vector<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *> &st,
                               const KeyType &key, const page_id_t &value,
                               std::unordered_map<page_id_t, bool> *unpin_is_dirty,
-                              std::unordered_map<page_id_t, size_t> *fuck);
+                              std::unordered_map<page_id_t, size_t> *fuck,
+                              std::unordered_map<page_id_t, Page *> *cached_ptr,
+                              std::unordered_map<page_id_t, Page *> *unpin_coll, const std::string &signature);
 
   void InnerPageMerge(
       const std::vector<std::pair<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *, int>> &st);
 
-  void UnpinPages(const std::unordered_map<page_id_t, bool> &unpin_is_dirty,
-                  const std::unordered_map<page_id_t, size_t> &fuck);
+  /*
+    call by a function, un-pin the pages in a thread scope.
+  */
+  void UnpinPages(const std::unordered_map<page_id_t, Page *> &unpin_coll, const std::string &sig);
 
   // find the first index >= key.
   auto BinarySearch(const KeyType &key, BPlusTreeLeafPage<KeyType, RID, KeyComparator> *page_ptr) -> int;
@@ -154,6 +159,16 @@ class BPlusTree {
   int leaf_max_size_;
   int internal_max_size_;
   int op_id_;
+  std::atomic<bool> is_empty_;
+  // double-check guard the is_empty_.
+  std::mutex mux_;
+  std::atomic<bool> root_locked_;
+  std::condition_variable c_v_;
+  // how many remain buffer pool page frames?
+  std::atomic<size_t> rem_cnt_;
+  // current B+ tree height.
+  std::atomic<size_t> cur_height_;
+  std::condition_variable buffer_pool_page_quota_;
 
   class FinalAction {
    public:
