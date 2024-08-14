@@ -140,6 +140,7 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
   pages_[corresponding_f_id].pin_count_ = 1;
   pages_[corresponding_f_id].is_dirty_ = false;
 
+  LOG_INFO("read page#%d", page_id);
   disk_manager_->ReadPage(page_id, pages_[corresponding_f_id].data_);
 
   replacer_->SetEvictable(corresponding_f_id, false);

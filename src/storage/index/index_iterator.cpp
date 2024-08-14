@@ -20,6 +20,10 @@ INDEXITERATOR_TYPE::IndexIterator(BufferPoolManager *mng, BPlusTreeLeafPage<KeyT
                                   size_t offset, size_t this_quota, std::atomic<size_t> *ret_to)
     : cur_leaf_page_ptr_(ptr), cur_offset_(offset), end_flag_(false), buffer_pool_manager_(mng), ret_to_(ret_to) {
   this_quota_.store(this_quota);
+  buffer_pool_manager_->FetchPage(cur_leaf_page_ptr_->GetPageId());
+  reinterpret_cast<Page *>(cur_leaf_page_ptr_)->RLatch();
+  LOG_INFO("page#%d acquire a R-latch. pin cnt: %d.", cur_leaf_page_ptr_->GetPageId(),
+           reinterpret_cast<Page *>(cur_leaf_page_ptr_)->GetPinCount());
 }
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -54,6 +58,8 @@ auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
   size_t offset_value = cur_offset_.load(std::memory_order_seq_cst);
   if (offset_value >= static_cast<size_t>(cur_leaf_page_ptr_->GetSize())) {
     page_id_t next_page_id = cur_leaf_page_ptr_->GetNextPageId();
+    LOG_INFO("page#%d release a R-latch. pin cnt: %d.", cur_leaf_page_ptr_->GetPageId(),
+             reinterpret_cast<Page *>(cur_leaf_page_ptr_)->GetPinCount());
     reinterpret_cast<Page *>(cur_leaf_page_ptr_)->RUnlatch();
     buffer_pool_manager_->UnpinPage(cur_leaf_page_ptr_->GetPageId(), false);
 
@@ -64,6 +70,8 @@ auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
       cur_leaf_page_ptr_ = reinterpret_cast<BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *>(
           buffer_pool_manager_->FetchPage(next_page_id));
       reinterpret_cast<Page *>(cur_leaf_page_ptr_)->RLatch();
+      LOG_INFO("page#%d acquire a R-latch. pin cnt: %d.", cur_leaf_page_ptr_->GetPageId(),
+               reinterpret_cast<Page *>(cur_leaf_page_ptr_)->GetPinCount());
       cur_offset_.store(0, std::memory_order_seq_cst);
     }
   }

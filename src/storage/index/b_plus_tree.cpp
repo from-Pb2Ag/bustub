@@ -43,12 +43,27 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool { return is_empty_.load(); }
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *transaction) -> bool {
-  LOG_INFO("op: %d. attempts get value of key %ld", op_id_, key.ToString());
-  Page *ptr = buffer_pool_manager_->FetchPage(root_page_id_);
+  auto signatures = GenerateNRandomString(1);
+  std::string signature = signatures[0];
+  LOG_INFO("[%s]: attempts get value of key %ld. rem_quota: %ld.", signature.c_str(), key.ToString(), rem_cnt_.load());
+  Page *ptr = nullptr;
   Page *tmp = nullptr;
+  std::atomic<size_t> prime_quota = 2;
+
+  do {
+    std::unique_lock<std::mutex> lock(mux_);
+    while (rem_cnt_.load() < prime_quota) {
+      buffer_pool_page_quota_.wait(lock);
+    }
+
+    rem_cnt_.fetch_sub(prime_quota);
+    LOG_INFO("[%s]: reserved frames. now rem_quota: %ld.", signature.c_str(), rem_cnt_.load());
+    break;
+  } while (true);
+
+  ptr = buffer_pool_manager_->FetchPage(root_page_id_);
   ptr->RLatch();
-  LOG_INFO("page#%d acquire a R latch.", ptr->GetPageId());
-  // op_id_++;
+  LOG_INFO("[%s]: page#%d acquire a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(), ptr->GetPinCount());
 
   do {
     auto *tmp_ptr = reinterpret_cast<BPlusTreePage *>(ptr);
@@ -62,19 +77,23 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
       // ----
       // tmp is parent.
       ptr->RLatch();
-      LOG_INFO("page#%d acquire a R latch.", ptr->GetPageId());
+      LOG_INFO("[%s]: page#%d acquire a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(),
+               ptr->GetPinCount());
       tmp->RUnlatch();
-      LOG_INFO("page#%d release a R latch.", tmp->GetPageId());
+      buffer_pool_manager_->UnpinPage(tmp->GetPageId(), false);
+      LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), tmp->GetPageId(),
+               tmp->GetPinCount());
       // ----
       buffer_pool_manager_->UnpinPage(tmp->GetPageId(), false);
       if (ptr_2_internal->ValueAt(ret.first) == INVALID_PAGE_ID) {
         ptr->RUnlatch();
-        LOG_INFO("page#%d release a R latch.", ptr->GetPageId());
+        buffer_pool_manager_->UnpinPage(ptr->GetPageId(), false);
+        LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(),
+                 ptr->GetPinCount());
+        rem_cnt_.fetch_add(prime_quota);
+        buffer_pool_page_quota_.notify_one();
         return false;
       }
-      // if (ptr_2_internal->ValueAt(ret.first) == 0) {
-      //   return false;
-      // }
     } else {
       // only get value in leaf page.
       auto ptr_2_leaf = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(ptr);
@@ -92,24 +111,38 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
         if (comp == 0) {
           result->push_back(this_value);
           ptr->RUnlatch();
-          LOG_INFO("page#%d release a R latch.", ptr->GetPageId());
           buffer_pool_manager_->UnpinPage(ptr_2_leaf->GetPageId(), false);
+          LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(),
+                   ptr->GetPinCount());
+          rem_cnt_.fetch_add(prime_quota);
+          buffer_pool_page_quota_.notify_one();
           return true;
         }
         if (comp < 0) {
           ptr->RUnlatch();
-          LOG_INFO("page#%d release a R latch.", ptr->GetPageId());
           buffer_pool_manager_->UnpinPage(ptr_2_leaf->GetPageId(), false);
+          LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(),
+                   ptr->GetPinCount());
+          rem_cnt_.fetch_add(prime_quota);
+          buffer_pool_page_quota_.notify_one();
           return false;
         }
       }
       ptr->RUnlatch();
-      LOG_INFO("page#%d release a R latch.", ptr->GetPageId());
       buffer_pool_manager_->UnpinPage(ptr_2_leaf->GetPageId(), false);
+      LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(),
+               ptr->GetPinCount());
+      rem_cnt_.fetch_add(prime_quota);
+      buffer_pool_page_quota_.notify_one();
       return false;
     }
   } while (true);
 
+  ptr->RUnlatch();
+  buffer_pool_manager_->UnpinPage(ptr->GetPageId(), false);
+  LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(), ptr->GetPinCount());
+  rem_cnt_.fetch_add(prime_quota);
+  buffer_pool_page_quota_.notify_one();
   return false;
 }
 
@@ -681,10 +714,7 @@ INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
   auto signatures = GenerateNRandomString(1);
   std::string signature = signatures[0];
-  LOG_INFO("attempts remove k:  %ld. rem quota: %ld", key.ToString(), rem_cnt_.load());
-  // op_id_++;
-  // FinalAction final_action(this);
-  // final_action.Deactivate();
+  LOG_INFO("[%s]: attempts remove k:  %ld. rem quota: %ld", signature.c_str(), key.ToString(), rem_cnt_.load());
 
   if (IsEmpty()) {
     LOG_INFO("empty remove path 1.");
@@ -699,7 +729,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
   do {
     std::unique_lock<std::mutex> lock(mux_);
     while (rem_cnt_.load() < prime_quota) {
-      LOG_INFO("[%s]: buffer pool is stained, sleep.", signature.c_str());
+      LOG_INFO("[%s]: buffer pool is strained, sleep.", signature.c_str());
       buffer_pool_page_quota_.wait(lock);
     }
 
@@ -726,6 +756,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
     }
 
     ptr->WLatch();
+    LOG_INFO("[%s]: page#%d acquire a W-latch.", signature.c_str(), ptr->GetPageId());
     break;
   } while (true);
 
@@ -743,6 +774,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
       ptr_2_internal = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(ptr);
       auto ret = FindFirstInfIndex(key, ptr_2_internal);
       st_1.push_back({ptr_2_internal, ret.first});
+      LOG_INFO("page#%d en-stack.", ptr_2_internal->GetPageId());
 
       page_id_t nxt_level_page = ptr_2_internal->ValueAt(ret.first);
 
@@ -755,6 +787,8 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
       }
 
       ptr->WLatch();
+      tmp_ptr = reinterpret_cast<BPlusTreePage *>(ptr);
+      LOG_INFO("[%s]: page#%d acquire a W-latch.", signature.c_str(), ptr->GetPageId());
 
       auto peek_ptr = reinterpret_cast<BPlusTreePage *>(ptr);
       if (peek_ptr->GetSize() > peek_ptr->GetMinSize()) {
@@ -769,6 +803,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
         next_unlock_idx = st_1.size();
       }
     } else {
+      LOG_INFO("[%s]: lands page#%d.", signature.c_str(), ptr->GetPageId());
       auto ptr_2_leaf = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(ptr);
 
       size_t index_for_key = 0;
@@ -825,11 +860,11 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
           }
           damn->WUnlatch();
         }
-
         if (st_1.empty()) {
           UnlatchRootPage();
         }
         ptr->WUnlatch();
+
         UnpinPages(unpin_coll, signature);
 
         rem_cnt_.fetch_add(prime_quota);
@@ -921,9 +956,12 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
             st_1[i].first->MoveBackward(st_1[i].second + 1);
           }
           st_1[i].first->IncreaseSize(-1);
-          KeyType new_first_key = st_1[i].first->KeyAt(0);
-          PopulateUpV2(st_1[i].first, old_first_key, new_first_key);
-
+          if (st_1[i].first->GetSize()) {
+            KeyType new_first_key = st_1[i].first->KeyAt(0);
+            LOG_INFO("page#%d. old/new key: %ld, %ld", st_1[i].first->GetPageId(), old_first_key.ToString(),
+                     new_first_key.ToString());
+            PopulateUpV2(st_1[i].first, old_first_key, new_first_key);
+          }
           if (st_1[i].first->GetSize() >= st_1[i].first->GetMinSize()) {
             break;
           }
@@ -932,8 +970,17 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
             if (st_1[i - 1].second > 0) {
               // the other one is  st_1[i].first.
               page_id_t prev_page_id = st_1[i - 1].first->ValueAt(st_1[i - 1].second - 1);
-              auto prev_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
-                  buffer_pool_manager_->FetchPage(prev_page_id));
+              BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *prev_ptr = nullptr;
+
+              if (auto it = cached_ptr.find(prev_page_id); it != cached_ptr.end()) {
+                prev_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(it->second);
+              } else {
+                prev_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
+                    buffer_pool_manager_->FetchPage(prev_page_id));
+                cached_ptr.insert({prev_page_id, reinterpret_cast<Page *>(prev_ptr)});
+                unpin_coll.insert({prev_page_id, reinterpret_cast<Page *>(prev_ptr)});
+              }
+
               if (prev_ptr->GetSize() > prev_ptr->GetMinSize()) {
                 BorrowFromLeftSibling(prev_ptr, st_1[i].first);
                 break;
@@ -943,8 +990,17 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
               // internal borrow/merge with right sibling.
             } else {
               page_id_t next_page_id = st_1[i - 1].first->ValueAt(st_1[i - 1].second + 1);
-              auto next_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
-                  buffer_pool_manager_->FetchPage(next_page_id));
+              BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *next_ptr = nullptr;
+
+              if (auto it = cached_ptr.find(next_page_id); it != cached_ptr.end()) {
+                next_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(it->second);
+              } else {
+                next_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
+                    buffer_pool_manager_->FetchPage(next_page_id));
+                cached_ptr.insert({next_page_id, reinterpret_cast<Page *>(next_ptr)});
+                unpin_coll.insert({next_page_id, reinterpret_cast<Page *>(next_ptr)});
+              }
+
               if (next_ptr->GetSize() > next_ptr->GetMinSize()) {
                 BorrowFromRightSibling(st_1[i].first, next_ptr);
                 break;
@@ -955,6 +1011,27 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
             }
           }
         }
+
+        TreeHeightTrim();
+
+        for (size_t i = next_unlock_idx; i < st_1.size(); i++) {
+          Page *damn = reinterpret_cast<Page *>(st_1[i].first);
+          if (i == 0) {
+            UnlatchRootPage();
+          }
+          damn->WUnlatch();
+        }
+        if (st_1.empty()) {
+          UnlatchRootPage();
+        }
+
+        prev_ptr->WUnlatch();
+        ptr->WUnlatch();
+
+        UnpinPages(unpin_coll, signature);
+        rem_cnt_.fetch_add(prime_quota);
+        buffer_pool_page_quota_.notify_one();
+
         LOG_INFO("find remove path 3.");
         return;
       }
@@ -962,13 +1039,24 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
       if (st_1.back().second < st_1.back().first->GetSize() - 1) {
         // it should in line with `st_1.back().first->ValueAt(st_1.back().second + 1);`.
         page_id_t next_page_id = ptr_2_leaf->GetNextPageId();
-        auto next_leaf_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(
-            buffer_pool_manager_->FetchPage(next_page_id));
+        Page *next_ptr = nullptr;
+        BPlusTreeLeafPage<KeyType, RID, KeyComparator> *next_leaf_ptr = nullptr;
 
-        if (index_for_key == 0) {
-          KeyType new_leaf_first_key = ptr_2_leaf->KeyAt(0);
-          FirstKeyPopulateUp(new_leaf_first_key, &st_1);
+        if (auto it = cached_ptr.find(next_page_id); it != cached_ptr.end()) {
+          next_ptr = it->second;
+        } else {
+          next_ptr = buffer_pool_manager_->FetchPage(next_page_id);
+          next_leaf_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(next_ptr);
+          cached_ptr.insert({next_page_id, next_ptr});
+          unpin_coll.insert({next_page_id, next_ptr});
         }
+
+        // if (index_for_key == 0 && ptr_2_leaf->GetSize() > 0) {
+        //   // !!!
+        //   KeyType new_leaf_first_key = ptr_2_leaf->KeyAt(0);
+        //   FirstKeyPopulateUp(new_leaf_first_key, &st_1);
+        //   LOG_INFO("[%s]: new first key: %ld.", signature.c_str(), new_leaf_first_key.ToString());
+        // }
 
         // next can "provide" the first one.
         if (next_leaf_ptr->GetSize() > next_leaf_ptr->GetMinSize()) {
@@ -983,12 +1071,35 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
           next_leaf_ptr->IncreaseSize(-1);
           KeyType new_key = next_leaf_ptr->KeyAt(0);
 
+          PopulateUpV2(ptr_2_leaf, key, ptr_2_leaf->KeyAt(0));
           PopulateUpV2(next_leaf_ptr, mov_key, new_key);
+
+          for (size_t i = next_unlock_idx; i < st_1.size(); i++) {
+            Page *damn = reinterpret_cast<Page *>(st_1[i].first);
+            if (i == 0) {
+              UnlatchRootPage();
+            }
+            damn->WUnlatch();
+          }
+
+          if (st_1.empty()) {
+            UnlatchRootPage();
+          }
+          next_ptr->WUnlatch();
+          ptr->WUnlatch();
+          UnpinPages(unpin_coll, signature);
+
+          rem_cnt_.fetch_add(prime_quota);
+          buffer_pool_page_quota_.notify_one();
+
           LOG_INFO("find remove path 4.");
           return;
         }
         // merged with next page (next page is merged)?
         // and set flag as FALSE. if merged with next page toggle to FALSE.
+        if (ptr_2_leaf->GetSize() == 0) {
+          PopulateUpV2(ptr_2_leaf, key, next_leaf_ptr->KeyAt(0));
+        }
         MergedWithRightSibling(ptr_2_leaf, next_leaf_ptr);
         bool flag = false;
 
@@ -1001,6 +1112,8 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
           }
           st_1[i].first->IncreaseSize(-1);
           KeyType new_first_key = st_1[i].first->KeyAt(0);
+          LOG_INFO("[%s]: old/new first key: %ld, %ld.", signature.c_str(), old_first_key.ToString(),
+                   new_first_key.ToString());
           PopulateUpV2(st_1[i].first, old_first_key, new_first_key);
 
           if (st_1[i].first->GetSize() >= st_1[i].first->GetMinSize()) {
@@ -1011,8 +1124,17 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
             if (st_1[i - 1].second > 0) {
               // the other one is  st_1[i].first.
               page_id_t prev_page_id = st_1[i - 1].first->ValueAt(st_1[i - 1].second - 1);
-              auto prev_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
-                  buffer_pool_manager_->FetchPage(prev_page_id));
+              BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *prev_ptr = nullptr;
+
+              if (auto it = cached_ptr.find(prev_page_id); it != cached_ptr.end()) {
+                prev_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(it->second);
+              } else {
+                prev_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
+                    buffer_pool_manager_->FetchPage(prev_page_id));
+                cached_ptr.insert({prev_page_id, reinterpret_cast<Page *>(prev_ptr)});
+                unpin_coll.insert({prev_page_id, reinterpret_cast<Page *>(prev_ptr)});
+              }
+
               if (prev_ptr->GetSize() > prev_ptr->GetMinSize()) {
                 BorrowFromLeftSibling(prev_ptr, st_1[i].first);
                 break;
@@ -1021,8 +1143,17 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
               flag = true;
             } else {
               page_id_t next_page_id = st_1[i - 1].first->ValueAt(st_1[i - 1].second + 1);
-              auto next_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
-                  buffer_pool_manager_->FetchPage(next_page_id));
+              BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *next_ptr = nullptr;
+
+              if (auto it = cached_ptr.find(next_page_id); it != cached_ptr.end()) {
+                next_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(it->second);
+              } else {
+                next_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
+                    buffer_pool_manager_->FetchPage(next_page_id));
+                cached_ptr.insert({next_page_id, reinterpret_cast<Page *>(next_ptr)});
+                unpin_coll.insert({next_page_id, reinterpret_cast<Page *>(next_ptr)});
+              }
+
               if (next_ptr->GetSize() > next_ptr->GetMinSize()) {
                 BorrowFromRightSibling(st_1[i].first, next_ptr);
                 break;
@@ -1033,7 +1164,281 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
             }
           }
         }
+
+        TreeHeightTrim();
+
+        for (size_t i = next_unlock_idx; i < st_1.size(); i++) {
+          Page *damn = reinterpret_cast<Page *>(st_1[i].first);
+          if (i == 0) {
+            UnlatchRootPage();
+          }
+          damn->WUnlatch();
+        }
+        if (st_1.empty()) {
+          UnlatchRootPage();
+        }
+
+        next_ptr->WUnlatch();
+        ptr->WUnlatch();
+
+        UnpinPages(unpin_coll, signature);
+        rem_cnt_.fetch_add(prime_quota);
+        buffer_pool_page_quota_.notify_one();
+
         LOG_INFO("find remove path 5.");
+        return;
+      }
+      // !!!!
+      // when inner page has rank = 2, 3?
+      // has no sibling.
+      if (st_1.back().first->GetSize() == 1) {
+        // next exist (but is not a sibling).
+        if (ptr_2_leaf->GetNextPageId() != INVALID_PAGE_ID) {
+          page_id_t next_page_id = ptr_2_leaf->GetNextPageId();
+          Page *next_ptr = nullptr;
+          BPlusTreeLeafPage<KeyType, RID, KeyComparator> *next_leaf_ptr = nullptr;
+
+          if (auto it = cached_ptr.find(next_page_id); it != cached_ptr.end()) {
+            next_ptr = it->second;
+          } else {
+            next_ptr = buffer_pool_manager_->FetchPage(next_page_id);
+            next_ptr->WLatch();
+            next_leaf_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(next_ptr);
+            cached_ptr.insert({next_page_id, next_ptr});
+            unpin_coll.insert({next_page_id, next_ptr});
+          }
+
+          if (next_leaf_ptr->GetSize() > next_leaf_ptr->GetMinSize()) {
+            KeyType mov_key = next_leaf_ptr->KeyAt(0);
+            ValueType mov_value = next_leaf_ptr->ValueAt(0);
+
+            ptr_2_leaf->SetKeyAt(ptr_2_leaf->GetSize(), mov_key);
+            ptr_2_leaf->SetValueAt(ptr_2_leaf->GetSize(), mov_value);
+            ptr_2_leaf->IncreaseSize(1);
+
+            next_leaf_ptr->MoveBackward(0);
+            next_leaf_ptr->IncreaseSize(-1);
+            KeyType new_key = next_leaf_ptr->KeyAt(0);
+
+            PopulateUpV2(ptr_2_leaf, key, ptr_2_leaf->KeyAt(0));
+            PopulateUpV2(next_leaf_ptr, mov_key, new_key);
+
+            for (size_t i = next_unlock_idx; i < st_1.size(); i++) {
+              Page *damn = reinterpret_cast<Page *>(st_1[i].first);
+              if (i == 0) {
+                UnlatchRootPage();
+              }
+              damn->WUnlatch();
+            }
+
+            if (st_1.empty()) {
+              UnlatchRootPage();
+            }
+            next_ptr->WUnlatch();
+            ptr->WUnlatch();
+            UnpinPages(unpin_coll, signature);
+
+            rem_cnt_.fetch_add(prime_quota);
+            buffer_pool_page_quota_.notify_one();
+
+            LOG_INFO("find remove path 4-1.");
+            return;
+          }
+
+          page_id_t next_pr_pid = next_leaf_ptr->GetParentPageId();
+          MergedWithRightSibling(ptr_2_leaf, next_leaf_ptr);
+          PopulateUpV2(ptr_2_leaf, key, ptr_2_leaf->KeyAt(0));
+
+          Page *next_pr_ptr = buffer_pool_manager_->FetchPage(next_pr_pid);
+          BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *next_pr_int_ptr = nullptr;
+          next_pr_int_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(next_pr_ptr);
+
+          next_pr_int_ptr->MoveBackward(0);
+          next_pr_int_ptr->IncreaseSize(-1);
+
+          for (int i = st_1.size() - 1; i >= 0; i--) {
+            if (next_pr_int_ptr->GetPageId() == st_1[i].first->GetPageId()) {
+              break;
+            }
+            if (next_pr_int_ptr->GetSize() < next_pr_int_ptr->GetMinSize()) {
+              next_pr_pid = next_pr_int_ptr->GetParentPageId();
+              MergedWithRightSibling(st_1[i].first, next_pr_int_ptr);
+
+              if (next_pr_pid == INVALID_PAGE_ID) {
+                break;
+              }
+
+              next_pr_int_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
+                  buffer_pool_manager_->FetchPage(next_pr_pid));
+              next_pr_int_ptr->MoveBackward(1);
+              next_pr_int_ptr->IncreaseSize(-1);
+            } else {
+              break;
+            }
+          }
+
+          TreeHeightTrim();
+
+          for (size_t i = next_unlock_idx; i < st_1.size(); i++) {
+            Page *damn = reinterpret_cast<Page *>(st_1[i].first);
+            if (i == 0) {
+              UnlatchRootPage();
+            }
+            damn->WUnlatch();
+          }
+
+          if (st_1.empty()) {
+            UnlatchRootPage();
+          }
+          next_ptr->WUnlatch();
+          ptr->WUnlatch();
+          UnpinPages(unpin_coll, signature);
+
+          rem_cnt_.fetch_add(prime_quota);
+          buffer_pool_page_quota_.notify_one();
+
+          return;
+        }
+        // prev exist.
+        int check_point = -1;
+        for (int i = st_1.size() - 1; i >= 0; i--) {
+          if (st_1[i].second > 0) {
+            check_point = i;
+            break;
+          }
+        }
+
+        // st_1[check_point].first is the parent ptr.
+        // A <=> st_1[check_point].second - 1 is the idx.
+        // KeyAt(A).
+        assert(check_point != -1);
+
+        auto st_0 = st_1;
+        st_0[check_point].second = st_1[check_point].second - 1;
+        for (size_t i = check_point + 1; i < st_0.size(); i++) {
+          if (i > static_cast<size_t>(check_point + 1)) {
+            st_0[i - 1].second = st_0[i - 1].first->GetSize() - 1;
+          }
+          page_id_t next_page_id = st_0[i - 1].first->ValueAt(st_0[i - 1].second);
+
+          if (auto it = cached_ptr.find(next_page_id); it != cached_ptr.end()) {
+            ptr = it->second;
+          } else {
+            ptr = buffer_pool_manager_->FetchPage(next_page_id);
+            cached_ptr.insert({next_page_id, ptr});
+            unpin_coll.insert({next_page_id, ptr});
+          }
+
+          ptr->WLatch();
+          st_0[i].first = reinterpret_cast<BPlusTreeInternalPage<KeyType, bustub::page_id_t, KeyComparator> *>(ptr);
+        }
+        st_0[st_0.size() - 1].second = st_0[st_0.size() - 1].first->GetSize() - 1;
+
+        page_id_t prev_page_id = st_0.back().first->ValueAt(st_0.back().second);
+        Page *prev_ptr = nullptr;
+        BPlusTreeLeafPage<KeyType, RID, KeyComparator> *prev_leaf_ptr = nullptr;
+
+        if (auto it = cached_ptr.find(prev_page_id); it != cached_ptr.end()) {
+          prev_ptr = it->second;
+        } else {
+          prev_ptr = buffer_pool_manager_->FetchPage(prev_page_id);
+          prev_ptr->WLatch();
+          prev_leaf_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(prev_ptr);
+          cached_ptr.insert({prev_page_id, prev_ptr});
+          unpin_coll.insert({prev_page_id, prev_ptr});
+        }
+
+        if (prev_leaf_ptr->GetSize() > prev_leaf_ptr->GetMinSize()) {
+          int last_idx = prev_leaf_ptr->GetSize() - 1;
+          KeyType mov_key = prev_leaf_ptr->KeyAt(last_idx);
+          ValueType mov_value = prev_leaf_ptr->ValueAt(last_idx);
+
+          ptr_2_leaf->MoveForward(0);
+          ptr_2_leaf->SetKeyAt(0, mov_key);
+          ptr_2_leaf->SetValueAt(0, mov_value);
+          ptr_2_leaf->IncreaseSize(1);
+
+          prev_leaf_ptr->IncreaseSize(-1);
+
+          PopulateUpV2(ptr_2_leaf, key, ptr_2_leaf->KeyAt(0));
+
+          for (size_t i = next_unlock_idx; i < st_1.size(); i++) {
+            Page *damn0 = reinterpret_cast<Page *>(st_0[i].first);
+            Page *damn1 = reinterpret_cast<Page *>(st_1[i].first);
+            if (i == 0) {
+              UnlatchRootPage();
+            }
+            damn0->WUnlatch();
+            if (damn0 != damn1) {
+              damn1->WUnlatch();
+            }
+          }
+
+          if (st_1.empty()) {
+            UnlatchRootPage();
+          }
+          prev_ptr->WUnlatch();
+          ptr->WUnlatch();
+          UnpinPages(unpin_coll, signature);
+
+          rem_cnt_.fetch_add(prime_quota);
+          buffer_pool_page_quota_.notify_one();
+
+          LOG_INFO("find remove path 4-2.");
+          return;
+        }
+
+        page_id_t this_pr_pid = ptr_2_leaf->GetParentPageId();
+        MergedToLeftSibling(prev_leaf_ptr, ptr_2_leaf);
+
+        st_1.back().first->MoveBackward(0);
+        st_1.back().first->IncreaseSize(-1);
+
+        for (int i = st_1.size() - 1; i >= 0; i--) {
+          if (st_0[i].first->GetPageId() == st_1[i].first->GetPageId()) {
+            break;
+          }
+          if (st_1[i].first->GetSize() < st_1[i].first->GetMinSize()) {
+            this_pr_pid = st_1[i].first->GetParentPageId();
+            MergedToLeftSibling(st_0[i].first, st_1[i].first);
+
+            if (this_pr_pid == INVALID_PAGE_ID) {
+              break;
+            }
+
+            st_1[i].first->MoveBackward(1);
+            st_1[i].first->IncreaseSize(-1);
+          } else {
+            break;
+          }
+        }
+
+        TreeHeightTrim();
+
+        for (size_t i = next_unlock_idx; i < st_1.size(); i++) {
+          Page *damn0 = reinterpret_cast<Page *>(st_0[i].first);
+          Page *damn1 = reinterpret_cast<Page *>(st_1[i].first);
+          if (i == 0) {
+            UnlatchRootPage();
+          }
+          damn0->WUnlatch();
+          if (damn0 != damn1) {
+            damn1->WUnlatch();
+          }
+        }
+
+        if (st_1.empty()) {
+          UnlatchRootPage();
+        }
+        prev_ptr->WUnlatch();
+        ptr->WUnlatch();
+        UnpinPages(unpin_coll, signature);
+
+        rem_cnt_.fetch_add(prime_quota);
+        buffer_pool_page_quota_.notify_one();
+
+        LOG_INFO("find remove path 4-3.");
+
         return;
       }
     }
@@ -1125,14 +1530,22 @@ void BPLUSTREE_TYPE::PopulateUpV2(BPlusTreePage *this_page, const KeyType &old_f
   }
 
   while (ppid != INVALID_PAGE_ID) {
+    buffer_pool_manager_->UnpinPage(fuck->GetPageId(), true);
     fuck = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
         buffer_pool_manager_->FetchPage(ppid));
-    if (comparator_(fuck->KeyAt(0), old_first_key) == 0) {
-      fuck->SetKeyAt(0, new_first_key);
+    auto ret = FindFirstInfIndex(old_first_key, fuck);
+
+    if (!ret.second && comparator_(fuck->KeyAt(ret.first), old_first_key) == 0) {
+      fuck->SetKeyAt(ret.first, new_first_key);
+      // not necessarily in index [0].
+      // fuck->SetKeyAt(0, new_first_key);
       ppid = fuck->GetParentPageId();
     } else {
       break;
     }
+  }
+  if (ppid != INVALID_PAGE_ID) {
+    buffer_pool_manager_->UnpinPage(fuck->GetPageId(), true);
   }
 }
 
@@ -1164,10 +1577,10 @@ void BPLUSTREE_TYPE::MergedToLeftSibling(BPlusTreePage *prev_page, BPlusTreePage
       prev_int_ptr->SetValueAt(before_size + i, this_int_ptr->ValueAt(i));
 
       auto *tmp = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(this_int_ptr->ValueAt(i)));
-      Page *tmp1 = reinterpret_cast<Page *>(tmp);
-      tmp1->WLatch();
+      // Page *tmp1 = reinterpret_cast<Page *>(tmp);
+      // tmp1->WLatch();
       tmp->SetParentPageId(prev_page_id);
-      tmp1->WUnlatch();
+      // tmp1->WUnlatch();
       buffer_pool_manager_->UnpinPage(tmp->GetPageId(), true);
     }
 
@@ -1227,30 +1640,31 @@ void BPLUSTREE_TYPE::MergedWithRightSibling(BPlusTreePage *this_page, BPlusTreeP
       this_int_ptr->SetValueAt(before_size + i, next_int_ptr->ValueAt(i));
 
       auto *tmp = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(next_int_ptr->ValueAt(i)));
-      Page *tmp1 = reinterpret_cast<Page *>(tmp);
-      tmp1->WLatch();
+      // Page *tmp1 = reinterpret_cast<Page *>(tmp);
+      // tmp1->WLatch();
       tmp->SetParentPageId(this_page_id);
-      tmp1->WUnlatch();
+      // tmp1->WUnlatch();
       buffer_pool_manager_->UnpinPage(tmp->GetPageId(), true);
     }
 
-    page_id_t ppid = this_page->GetParentPageId();
-    auto *p_ptr = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(ppid));
-    Page *p_page_ptr = reinterpret_cast<Page *>(p_ptr);
-    if (GetRootPageId() == ppid && p_ptr->GetSize() == 2) {
-      root_page_id_ = this_page->GetPageId();
-      this_page->SetParentPageId(INVALID_PAGE_ID);
-      UpdateRootPageId();
+    // page_id_t ppid = this_page->GetParentPageId();
+    // auto *p_ptr = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(ppid));
+    // Page *p_page_ptr = reinterpret_cast<Page *>(p_ptr);
+    // if (GetRootPageId() == ppid && p_ptr->GetSize() == 2) {
+    //   root_page_id_ = this_page->GetPageId();
+    //   this_page->SetParentPageId(INVALID_PAGE_ID);
+    //   UpdateRootPageId();
 
-      while (p_page_ptr->GetPinCount() > 0) {
-        buffer_pool_manager_->UnpinPage(ppid, false);
-      }
-      p_page_ptr->WUnlatch();
+    //   while (p_page_ptr->GetPinCount() > 0) {
+    //     buffer_pool_manager_->UnpinPage(ppid, false);
+    //   }
+    //   p_page_ptr->WUnlatch();
 
-      buffer_pool_manager_->DeletePage(ppid);
-    } else {
-      buffer_pool_manager_->UnpinPage(ppid, false);
-    }
+    //   buffer_pool_manager_->DeletePage(ppid);
+    // } else {
+    //   buffer_pool_manager_->UnpinPage(ppid, false);
+    // }
+    // buffer_pool_manager_->UnpinPage(ppid, false);
   }
 
   this_page->IncreaseSize(next_page->GetSize());
@@ -1308,6 +1722,8 @@ void BPLUSTREE_TYPE::InnerPageMerge(
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
+  auto signatures = GenerateNRandomString(1);
+  std::string signature = signatures[0];
   Page *ptr = nullptr;
   std::atomic<size_t> prime_quota = 2;
 
@@ -1323,30 +1739,25 @@ auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
 
   ptr = buffer_pool_manager_->FetchPage(root_page_id_);
   ptr->RLatch();
-
-  // do {
-  //   std::unique_lock<std::mutex> lock(mux_);
-  //   while (root_locked_.load()) {
-  //     c_v_.wait(lock);
-  //   }
-
-  //   ptr = buffer_pool_manager_->FetchPage(root_page_id_);
-  //   ptr->RLatch();
-  // } while (true);
+  LOG_INFO("[%s]: page#%d acquire a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(), ptr->GetPinCount());
 
   auto tmp = reinterpret_cast<BPlusTreePage *>(ptr);
   while (!tmp->IsLeafPage()) {
     auto fuck = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(tmp);
     tmp = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(fuck->ValueAt(0)));
+    LOG_INFO("[%s]: page#%d acquire a R-latch. pin cnt: %d.", signature.c_str(), tmp->GetPageId(),
+             reinterpret_cast<Page *>(tmp)->GetPinCount());
     reinterpret_cast<Page *>(tmp)->RLatch();
+    LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), fuck->GetPageId(),
+             reinterpret_cast<Page *>(fuck)->GetPinCount());
     reinterpret_cast<Page *>(fuck)->RUnlatch();
 
     buffer_pool_manager_->UnpinPage(fuck->GetPageId(), false);
   }
-  LOG_INFO("case 1 now first page");
-  LogLeafPage(reinterpret_cast<BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *>(tmp));
 
   auto fuck = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(tmp);
+  LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), tmp->GetPageId(),
+           reinterpret_cast<Page *>(tmp)->GetPinCount());
   reinterpret_cast<Page *>(tmp)->RUnlatch();
   buffer_pool_manager_->UnpinPage(tmp->GetPageId(), false);
   // rem_cnt_.fetch_add(prime_quota);
@@ -1762,6 +2173,7 @@ INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::ToGraph(BPlusTreePage *page, BufferPoolManager *bpm, std::ofstream &out) const {
   std::string leaf_prefix("LEAF_");
   std::string internal_prefix("INT_");
+  LOG_INFO("ybhjbiuhniuniu????: %d", page->GetPageId());
   if (page->IsLeafPage()) {
     auto *leaf = reinterpret_cast<LeafPage *>(page);
     // Print node name
@@ -1826,6 +2238,7 @@ void BPLUSTREE_TYPE::ToGraph(BPlusTreePage *page, BufferPoolManager *bpm, std::o
     }
     // Print leaves
     for (int i = 0; i < inner->GetSize(); i++) {
+      LOG_INFO("inner page id: %d", inner->ValueAt(i));
       auto child_page = reinterpret_cast<BPlusTreePage *>(bpm->FetchPage(inner->ValueAt(i))->GetData());
       ToGraph(child_page, bpm, out);
       if (i > 0) {
@@ -1883,12 +2296,48 @@ void BPLUSTREE_TYPE::UnlatchRootPage() {
   mux_.unlock();
 }
 
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::TreeHeightTrim() {
+  Page *tmp_root = buffer_pool_manager_->FetchPage(GetRootPageId());
+  BPlusTreePage *tmp_bp_root = reinterpret_cast<BPlusTreePage *>(tmp_root);
+  /*
+    see this case: internal max_size = 3, leaf max_size = 2.
+          _________
+          |  2|4  |
+          ---------
+          /       \             remove [4] or [2] will yield only one leaf page as the root.
+      ______      ______
+      |    |      |    |        so it can be cascade and we need the `while`.
+      ------      ------
+        |            |
+      ______      ______
+      | 2  |      |  4 |
+      ------      ------
+  */
+
+  while (!tmp_bp_root->IsLeafPage() && tmp_bp_root->GetSize() == 1) {
+    auto old_root_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(tmp_bp_root);
+    cur_height_.fetch_sub(1);
+    root_page_id_ = old_root_ptr->ValueAt(0);
+
+    auto new_root_ptr = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(root_page_id_));
+    new_root_ptr->SetParentPageId(INVALID_PAGE_ID);
+    UpdateRootPageId();
+    // unpin or delete?
+    buffer_pool_manager_->UnpinPage(tmp_bp_root->GetPageId(), true);
+
+    tmp_bp_root = new_root_ptr;
+  }
+
+  buffer_pool_manager_->UnpinPage(tmp_bp_root->GetPageId(), true);
+}
+
 // Generate n random strings
 auto GenerateNRandomString(int n) -> std::vector<std::string> {
   std::random_device rd;
   std::mt19937 gen(rd());
   std::uniform_int_distribution<char> char_dist('A', 'z');
-  std::uniform_int_distribution<int> len_dist(6, 8);
+  std::uniform_int_distribution<int> len_dist(8, 8);
 
   std::vector<std::string> rand_strs(n);
 

@@ -234,7 +234,7 @@ TEST(BPlusTreeConcurrentTest, DeleteThenTravelTest1) {
 
   // LaunchParallelTest(2, DeleteHelper, &tree, remove_keys);
 
-  tree.PrintGraphUtil();
+  // tree.PrintGraphUtil();
   int64_t start_key = 1;
   int64_t current_key = start_key;
   int64_t size = 0;
@@ -249,11 +249,12 @@ TEST(BPlusTreeConcurrentTest, DeleteThenTravelTest1) {
 
   EXPECT_EQ(size, 5);
 
-  std::vector<int64_t> remove_keys = {1, 5, 3, 4};
+  std::vector<int64_t> remove_keys = {4, 5, 3, 2};
   for (const auto &key : remove_keys) {
     index_key.SetFromInteger(key);
     tree.Remove(index_key);
   }
+  tree.PrintGraphUtil();
 
   bpm->UnpinPage(HEADER_PAGE_ID, true);
   delete disk_manager;

@@ -155,6 +155,12 @@ class BPlusTree {
 
   void UnlatchRootPage();
 
+  /*
+    only called in `remove` function. since remove CAN make root page only has one child page,
+    theb the root page is stale.
+  */
+  void TreeHeightTrim();
+
   // member variable
   std::string index_name_;
   page_id_t root_page_id_;
