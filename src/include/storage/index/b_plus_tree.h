@@ -157,9 +157,9 @@ class BPlusTree {
 
   /*
     only called in `remove` function. since remove CAN make root page only has one child page,
-    theb the root page is stale.
+    then the root page is stale. we save these root(s) in `stale_root_coll`.
   */
-  void TreeHeightTrim();
+  void TreeHeightTrim(std::set<Page *> *stale_root_coll);
 
   // member variable
   std::string index_name_;
@@ -179,6 +179,11 @@ class BPlusTree {
   // current B+ tree height.
   std::atomic<size_t> cur_height_;
   std::condition_variable buffer_pool_page_quota_;
+  /*
+    guard the page delete option. when should we del a page? 1: merged due to `remove` op; 2: stale root page.
+    Since `delete` a page, first we need to `un-pin` and `un-latch` it.
+  */
+  std::mutex del_page_mux_;
 
   enum class RootLockType : size_t { UN_LOCKED = 0, READ_LOCKED = 1, WRITE_LOCKED = 1 << 1 };
   class FinalAction {

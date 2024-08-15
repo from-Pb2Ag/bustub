@@ -13,7 +13,7 @@ namespace bustub {
  */
 INDEX_TEMPLATE_ARGUMENTS
 // INDEXITERATOR_TYPE::IndexIterator() = default;
-INDEXITERATOR_TYPE::IndexIterator() : cur_leaf_page_ptr_(nullptr), cur_offset_(0), end_flag_(true), ret_to_(nullptr) {}
+INDEXITERATOR_TYPE::IndexIterator() : cur_leaf_page_ptr_(nullptr), cur_offset_(0), end_flag_(true) {}
 
 INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::IndexIterator(BufferPoolManager *mng, BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *ptr,
