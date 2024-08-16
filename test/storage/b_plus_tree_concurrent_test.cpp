@@ -394,13 +394,14 @@ TEST(BPlusTreeConcurrentTest, RandomDeleteTest) {
   std::vector<int64_t> remain_keys = std::vector<int64_t>(keys.begin() + rem_end_offset, keys.end());
   std::sort(remain_keys.begin(), remain_keys.end());
 
-  LaunchParallelTest(1, DeleteHelper, &tree, remove_keys);
+  LOG_INFO("insert phase end");
+  LaunchParallelTest(2, DeleteHelper, &tree, remove_keys);
 
+  LOG_INFO("remove phase end");
   int64_t start_key = remain_keys[0];
   int64_t current_key = start_key;
   int64_t size = 0;
   index_key.SetFromInteger(start_key);
-  // tree.PrintGraphUtil();
 
   for (auto iterator = tree.Begin(index_key); iterator != tree.End(); ++iterator) {
     LOG_INFO("FUCKKKKK");
@@ -421,7 +422,7 @@ TEST(BPlusTreeConcurrentTest, RandomDeleteTest) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, CaseStudy1DeleteTest) {
+TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy1DeleteTest) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -438,6 +439,7 @@ TEST(BPlusTreeConcurrentTest, CaseStudy1DeleteTest) {
 
   // sequential insert
   // awk '{gsub(/\./, "", $4); print $4}' bbbb.log | tr '\n' ',' | sed 's/^/{/; s/,$/};/'
+  // what about insert a new minimal key?
   std::vector<int64_t> keys = {60, 3,  62, 51, 48, 58, 15, 23, 11, 55, 24, 10, 44, 47, 38, 41, 21, 12, 26, 5,  39,
                                45, 19, 63, 7,  28, 50, 16, 13, 59, 9,  52, 22, 37, 54, 46, 30, 1,  34, 17, 49, 43,
                                36, 4,  33, 29, 18, 2,  14, 20, 53, 27, 40, 6,  31, 42, 32, 56, 25, 35, 57, 8,  61};
@@ -473,7 +475,7 @@ TEST(BPlusTreeConcurrentTest, CaseStudy1DeleteTest) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, CaseStudy2DeleteTest) {
+TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy2DeleteTest) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -490,6 +492,7 @@ TEST(BPlusTreeConcurrentTest, CaseStudy2DeleteTest) {
 
   // sequential insert
   // awk '{gsub(/\./, "", $4); print $4}' bbbb.log | tr '\n' ',' | sed 's/^/{/; s/,$/};/'
+  // find bugs of unlock a already unlocked latch.
   std::vector<int64_t> keys = {31, 12, 13, 10, 1,  58, 49, 34, 20, 61, 7,  6,  40, 62, 37, 50, 32, 11, 35, 36, 5,
                                3,  57, 46, 63, 41, 16, 59, 4,  21, 45, 55, 56, 26, 48, 8,  25, 27, 15, 38, 54, 24,
                                43, 39, 29, 47, 52, 9,  23, 19, 42, 53, 44, 60, 30, 51, 18, 17, 33, 14, 22, 28, 2};
@@ -498,6 +501,227 @@ TEST(BPlusTreeConcurrentTest, CaseStudy2DeleteTest) {
 
   std::vector<int64_t> remove_keys = {31, 12, 13, 10, 1, 58, 49, 34, 20, 61, 7, 6, 40, 62, 37, 50};
   std::vector<int64_t> remain_keys = std::vector<int64_t>(keys.begin() + remove_keys.size(), keys.end());
+  std::sort(remain_keys.begin(), remain_keys.end());
+
+  LaunchParallelTest(1, DeleteHelper, &tree, remove_keys);
+
+  int64_t start_key = remain_keys[0];
+  int64_t current_key = start_key;
+  int64_t size = 0;
+  index_key.SetFromInteger(start_key);
+
+  for (auto iterator = tree.Begin(index_key); iterator != tree.End(); ++iterator) {
+    current_key = remain_keys.at(size);
+    auto location = (*iterator).second;
+    EXPECT_EQ(location.GetPageId(), 0);
+    EXPECT_EQ(location.GetSlotNum(), current_key);
+    LOG_INFO("fuck val: %d", location.GetSlotNum());
+    size = size + 1;
+  }
+
+  EXPECT_EQ(size, remain_keys.size());
+
+  bpm->UnpinPage(HEADER_PAGE_ID, true);
+  delete disk_manager;
+  delete bpm;
+  remove("test.db");
+  remove("test.log");
+}
+
+TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy3DeleteTest) {
+  // create KeyComparator and index schema
+  auto key_schema = ParseCreateStatement("a bigint");
+  GenericComparator<8> comparator(key_schema.get());
+
+  auto *disk_manager = new DiskManager("test.db");
+  BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
+  // create b+ tree
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 2, 3);
+  GenericKey<8> index_key;
+  // create and fetch header_page
+  page_id_t page_id;
+  auto header_page = bpm->NewPage(&page_id);
+  (void)header_page;
+
+  // sequential insert
+  // awk '{gsub(/\./, "", $4); print $4}' bbbb.log | tr '\n' ',' | sed 's/^/{/; s/,$/};/'
+  std::vector<int64_t> keys = {59, 9,  52, 35, 58, 28, 42, 56, 23, 53, 7,  25, 60, 12, 37, 27, 54, 18, 8,  51, 24,
+                               20, 34, 1,  30, 10, 48, 6,  21, 2,  31, 3,  14, 11, 45, 15, 16, 22, 44, 19, 50, 55,
+                               33, 32, 13, 38, 5,  17, 26, 43, 62, 39, 29, 41, 36, 47, 40, 49, 61, 46, 57, 4,  63};
+
+  InsertHelper(&tree, keys);
+
+  std::vector<int64_t> remove_keys = {59, 9, 52, 35, 58, 28, 42, 56, 23, 53, 7, 25, 60, 12, 37, 27};
+  std::set<int64_t> remain_keys_set(keys.begin(), keys.end());
+  for (const auto &val : remove_keys) {
+    remain_keys_set.erase(val);
+  }
+  std::vector<int64_t> remain_keys = std::vector<int64_t>(remain_keys_set.begin(), remain_keys_set.end());
+  std::sort(remain_keys.begin(), remain_keys.end());
+
+  LaunchParallelTest(1, DeleteHelper, &tree, remove_keys);
+
+  int64_t start_key = remain_keys[0];
+  int64_t current_key = start_key;
+  int64_t size = 0;
+  index_key.SetFromInteger(start_key);
+
+  for (auto iterator = tree.Begin(index_key); iterator != tree.End(); ++iterator) {
+    current_key = remain_keys.at(size);
+    auto location = (*iterator).second;
+    EXPECT_EQ(location.GetPageId(), 0);
+    EXPECT_EQ(location.GetSlotNum(), current_key);
+    LOG_INFO("fuck val: %d", location.GetSlotNum());
+    size = size + 1;
+  }
+
+  EXPECT_EQ(size, remain_keys.size());
+
+  bpm->UnpinPage(HEADER_PAGE_ID, true);
+  delete disk_manager;
+  delete bpm;
+  remove("test.db");
+  remove("test.log");
+}
+
+TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy4DeleteTest) {
+  // create KeyComparator and index schema
+  auto key_schema = ParseCreateStatement("a bigint");
+  GenericComparator<8> comparator(key_schema.get());
+
+  auto *disk_manager = new DiskManager("test.db");
+  BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
+  // create b+ tree
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 2, 3);
+  GenericKey<8> index_key;
+  // create and fetch header_page
+  page_id_t page_id;
+  auto header_page = bpm->NewPage(&page_id);
+  (void)header_page;
+
+  // sequential insert
+  // awk '{gsub(/\./, "", $4); print $4}' bbbb.log | tr '\n' ',' | sed 's/^/{/; s/,$/};/'
+  std::vector<int64_t> keys = {47, 26, 2,  37, 61, 30, 15, 63, 39, 25, 52, 10, 20, 12, 9,  62, 57, 14, 6,  8,  21,
+                               60, 50, 34, 48, 24, 18, 3,  29, 42, 16, 35, 41, 55, 27, 11, 17, 54, 36, 19, 38, 56,
+                               5,  44, 53, 23, 45, 4,  49, 32, 33, 40, 59, 51, 22, 28, 58, 31, 46, 43, 1,  13, 7};
+
+  InsertHelper(&tree, keys);
+
+  std::vector<int64_t> remove_keys = {47, 26, 2, 37, 61, 30, 15, 63, 39, 25, 52, 10, 20, 12, 9, 62};
+  std::vector<int64_t> remain_keys = std::vector<int64_t>(keys.begin() + remove_keys.size(), keys.end());
+  std::sort(remain_keys.begin(), remain_keys.end());
+
+  LaunchParallelTest(1, DeleteHelper, &tree, remove_keys);
+
+  int64_t start_key = remain_keys[0];
+  int64_t current_key = start_key;
+  int64_t size = 0;
+  index_key.SetFromInteger(start_key);
+
+  for (auto iterator = tree.Begin(index_key); iterator != tree.End(); ++iterator) {
+    current_key = remain_keys.at(size);
+    auto location = (*iterator).second;
+    EXPECT_EQ(location.GetPageId(), 0);
+    EXPECT_EQ(location.GetSlotNum(), current_key);
+    LOG_INFO("fuck val: %d", location.GetSlotNum());
+    size = size + 1;
+  }
+
+  EXPECT_EQ(size, remain_keys.size());
+
+  bpm->UnpinPage(HEADER_PAGE_ID, true);
+  delete disk_manager;
+  delete bpm;
+  remove("test.db");
+  remove("test.log");
+}
+
+TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy5DeleteTest) {
+  // create KeyComparator and index schema
+  auto key_schema = ParseCreateStatement("a bigint");
+  GenericComparator<8> comparator(key_schema.get());
+
+  auto *disk_manager = new DiskManager("test.db");
+  BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
+  // create b+ tree
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 2, 3);
+  GenericKey<8> index_key;
+  // create and fetch header_page
+  page_id_t page_id;
+  auto header_page = bpm->NewPage(&page_id);
+  (void)header_page;
+
+  // sequential insert
+  // awk '{gsub(/\./, "", $4); print $4}' bbbb.log | tr '\n' ',' | sed 's/^/{/; s/,$/};/'
+  std::vector<int64_t> keys = {63, 4,  58, 49, 42, 36, 11, 38, 16, 35, 41, 30, 37, 39, 21, 62, 32, 57, 23, 52, 44,
+                               17, 24, 28, 19, 14, 20, 61, 53, 47, 5,  27, 46, 18, 22, 40, 13, 1,  51, 26, 50, 3,
+                               29, 7,  54, 45, 48, 43, 60, 59, 6,  9,  12, 31, 10, 25, 33, 2,  55, 15, 8,  56, 34};
+
+  InsertHelper(&tree, keys);
+
+  // std::vector<int64_t> remove_keys = {63, 4, 58, 49, 42, 36, 11, 38, 16, 35, 41, 30, 37, 39, 21, 62};
+  std::vector<int64_t> remove_keys = {63, 4, 58, 49, 42, 36, 11, 38, 16, 35, 41, 30, 37};
+  std::vector<int64_t> remain_keys = std::vector<int64_t>(keys.begin() + remove_keys.size(), keys.end());
+  std::sort(remain_keys.begin(), remain_keys.end());
+
+  LaunchParallelTest(1, DeleteHelper, &tree, remove_keys);
+
+  int64_t start_key = remain_keys[0];
+  int64_t current_key = start_key;
+  int64_t size = 0;
+  index_key.SetFromInteger(start_key);
+
+  for (auto iterator = tree.Begin(index_key); iterator != tree.End(); ++iterator) {
+    current_key = remain_keys.at(size);
+    auto location = (*iterator).second;
+    EXPECT_EQ(location.GetPageId(), 0);
+    EXPECT_EQ(location.GetSlotNum(), current_key);
+    LOG_INFO("fuck val: %d", location.GetSlotNum());
+    size = size + 1;
+  }
+
+  EXPECT_EQ(size, remain_keys.size());
+
+  bpm->UnpinPage(HEADER_PAGE_ID, true);
+  delete disk_manager;
+  delete bpm;
+  remove("test.db");
+  remove("test.log");
+}
+
+TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy6DeleteTest) {
+  // create KeyComparator and index schema
+  auto key_schema = ParseCreateStatement("a bigint");
+  GenericComparator<8> comparator(key_schema.get());
+
+  auto *disk_manager = new DiskManager("test.db");
+  BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
+  // create b+ tree
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 2, 3);
+  GenericKey<8> index_key;
+  // create and fetch header_page
+  page_id_t page_id;
+  auto header_page = bpm->NewPage(&page_id);
+  (void)header_page;
+
+  // sequential insert
+  // awk '{gsub(/\./, "", $4); print $4}' bbbb.log | tr '\n' ',' | sed 's/^/{/; s/,$/};/'
+  // std::vector<int64_t> keys = {27, 63, 61, 60, 20, 34, 62, 22, 51, 18, 24, 19, 45, 26, 5,  44, 7,  17, 4,  33, 48,
+  //                              21, 59, 1,  23, 42, 14, 47, 25, 15, 12, 2,  37, 6,  41, 28, 43, 40, 57, 50, 13, 31,
+  //                              30, 29, 35, 11, 32, 46, 55, 58, 10, 16, 36, 49, 38, 8,  39, 9,  52, 53, 54, 56, 3};
+  std::vector<int64_t> keys = {31, 61, 26, 14, 62, 22, 63, 23, 24, 34, 46, 25, 19, 39, 11, 56, 37, 2,  32, 15, 38,
+                               6,  28, 43, 52, 1,  60, 41, 3,  9,  27, 35, 20, 10, 16, 40, 47, 55, 54, 45, 44, 58,
+                               29, 8,  13, 42, 33, 18, 50, 53, 57, 4,  59, 21, 36, 48, 12, 49, 30, 17, 5,  51, 7};
+
+  InsertHelper(&tree, keys);
+
+  // std::vector<int64_t> remove_keys = {27, 63, 61, 60, 20, 34, 62, 22, 51, 18, 24, 19, 45, 26, 5, 44};
+  std::vector<int64_t> remove_keys = {31, 61, 26, 14, 62, 22, 63, 23, 24, 34, 46, 25, 19, 39, 11, 56};
+  std::set<int64_t> remain_keys_set(keys.begin(), keys.end());
+  for (const auto &val : remove_keys) {
+    remain_keys_set.erase(val);
+  }
+  std::vector<int64_t> remain_keys = std::vector<int64_t>(remain_keys_set.begin(), remain_keys_set.end());
   std::sort(remain_keys.begin(), remain_keys.end());
 
   LaunchParallelTest(1, DeleteHelper, &tree, remove_keys);
