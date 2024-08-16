@@ -1,0 +1,155 @@
+> ctest . -R ^BPlusTreeTestsCP2.DeleteTest3$ --verbose
+UpdateCTestConfiguration  from :/autograder/source/bustub/build/DartConfiguration.tcl
+UpdateCTestConfiguration  from :/autograder/source/bustub/build/DartConfiguration.tcl
+Test project /autograder/source/bustub/build
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 46
+    Start 46: BPlusTreeTestsCP2.DeleteTest3
+
+46: Test command: /autograder/source/bustub/build/test/grading_b_plus_tree_checkpoint_2_sequential_test "--gtest_filter=BPlusTreeTestsCP2.DeleteTest3" "--gtest_also_run_disabled_tests" "--gtest_color=auto" "--gtest_output=xml:/autograder/source/bustub/build/test/grading_b_plus_tree_checkpoint_2_sequential_test.xml" "--gtest_catch_exceptions=0"
+46: Test timeout computed to be: 120
+46: Running main() from gmock_main.cc
+46: Note: Google Test filter = BPlusTreeTestsCP2.DeleteTest3
+46: [==========] Running 1 test from 1 test suite.
+46: [----------] Global test environment set-up.
+46: [----------] 1 test from BPlusTreeTestsCP2
+46: [ RUN      ] BPlusTreeTestsCP2.DeleteTest3
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:27:BPlusTree] INFO  - create a new B+ tree. leaf_max_size: 2, internal_max_size: 3. pool size: 50.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:185:Insert] INFO  - [KTtDdOrx]: attempts insert kv: 1. cur depth: 0
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:214:Insert] INFO  - [KTtDdOrx]: attempts insert kv: 1. success path 1.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:185:Insert] INFO  - [RdYjVZvz]: attempts insert kv: 2. cur depth: 1
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:240:Insert] INFO  - [RdYjVZvz]: buffer get buffer pool reserve.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:263:Insert] INFO  - [RdYjVZvz]: acquire root page W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:696:UnpinPages] INFO  - total un-pin cnt: 1.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:438:Insert] INFO  - [RdYjVZvz]: attempts insert kv: 2. success path 2.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:185:Insert] INFO  - [s\`ImHEt]: attempts insert kv: 3. cur depth: 1
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:240:Insert] INFO  - [s\`ImHEt]: buffer get buffer pool reserve.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:263:Insert] INFO  - [s\`ImHEt]: acquire root page W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:696:UnpinPages] INFO  - total un-pin cnt: 3.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:563:Insert] INFO  - [s\`ImHEt]: attempts insert kv: 3. success path 3.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:185:Insert] INFO  - [ZglNZreV]: attempts insert kv: 4. cur depth: 2
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:240:Insert] INFO  - [ZglNZreV]: buffer get buffer pool reserve.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:263:Insert] INFO  - [ZglNZreV]: acquire root page W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:696:UnpinPages] INFO  - total un-pin cnt: 3.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:588:Insert] INFO  - [ZglNZreV]: attempts insert kv: 4. success path 4.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:185:Insert] INFO  - [IgRO[tqb]: attempts insert kv: 5. cur depth: 2
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:240:Insert] INFO  - [IgRO[tqb]: buffer get buffer pool reserve.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:263:Insert] INFO  - [IgRO[tqb]: acquire root page W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:696:UnpinPages] INFO  - total un-pin cnt: 5.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:588:Insert] INFO  - [IgRO[tqb]: attempts insert kv: 5. success path 4.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:185:Insert] INFO  - [oYOe`Jdl]: attempts insert kv: 6. cur depth: 3
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:240:Insert] INFO  - [oYOe`Jdl]: buffer get buffer pool reserve.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:263:Insert] INFO  - [oYOe`Jdl]: acquire root page W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:696:UnpinPages] INFO  - total un-pin cnt: 4.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:588:Insert] INFO  - [oYOe`Jdl]: attempts insert kv: 6. success path 4.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:185:Insert] INFO  - [k\yOagxj]: attempts insert kv: 7. cur depth: 3
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:240:Insert] INFO  - [k\yOagxj]: buffer get buffer pool reserve.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:263:Insert] INFO  - [k\yOagxj]: acquire root page W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:696:UnpinPages] INFO  - total un-pin cnt: 5.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:588:Insert] INFO  - [k\yOagxj]: attempts insert kv: 7. success path 4.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:185:Insert] INFO  - [xEu^lyxO]: attempts insert kv: 8. cur depth: 3
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:240:Insert] INFO  - [xEu^lyxO]: buffer get buffer pool reserve.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:263:Insert] INFO  - [xEu^lyxO]: acquire root page W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:696:UnpinPages] INFO  - total un-pin cnt: 4.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:588:Insert] INFO  - [xEu^lyxO]: attempts insert kv: 8. success path 4.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:185:Insert] INFO  - [WCa^ySqf]: attempts insert kv: 9. cur depth: 3
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:240:Insert] INFO  - [WCa^ySqf]: buffer get buffer pool reserve.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:263:Insert] INFO  - [WCa^ySqf]: acquire root page W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:696:UnpinPages] INFO  - total un-pin cnt: 7.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:588:Insert] INFO  - [WCa^ySqf]: attempts insert kv: 9. success path 4.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:185:Insert] INFO  - [sIgdZuJd]: attempts insert kv: 10. cur depth: 4
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:240:Insert] INFO  - [sIgdZuJd]: buffer get buffer pool reserve.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:263:Insert] INFO  - [sIgdZuJd]: acquire root page W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:696:UnpinPages] INFO  - total un-pin cnt: 5.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:588:Insert] INFO  - [sIgdZuJd]: attempts insert kv: 10. success path 4.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:712:Remove] INFO  - [`zUVDqoH]: attempts remove k:  1. rem quota: 50
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:733:Remove] INFO  - [`zUVDqoH]: buffer get buffer pool reserve.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:755:Remove] INFO  - [`zUVDqoH]: page#15 acquire a W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:773:Remove] INFO  - page#15 en-stack.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:787:Remove] INFO  - [`zUVDqoH]: page#7 acquire a W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:773:Remove] INFO  - page#7 en-stack.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:787:Remove] INFO  - [`zUVDqoH]: page#3 acquire a W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:773:Remove] INFO  - page#3 en-stack.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:787:Remove] INFO  - [`zUVDqoH]: page#1 acquire a W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:802:Remove] INFO  - [`zUVDqoH]: lands page#1.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:1723:MergedWithRightSibling] INFO  - page#2 is deleted.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:1124:Remove] INFO  - [`zUVDqoH]: old/new first key: 2, 2.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:2391:TreeHeightTrim] INFO  - stale root page cnt: 0. cur root: 15
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:696:UnpinPages] INFO  - total un-pin cnt: 5.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:1206:Remove] INFO  - find remove path 5.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:712:Remove] INFO  - [BSvIqN[F]: attempts remove k:  5. rem quota: 50
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:733:Remove] INFO  - [BSvIqN[F]: buffer get buffer pool reserve.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:755:Remove] INFO  - [BSvIqN[F]: page#15 acquire a W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:773:Remove] INFO  - page#15 en-stack.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:787:Remove] INFO  - [BSvIqN[F]: page#14 acquire a W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:773:Remove] INFO  - page#14 en-stack.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:787:Remove] INFO  - [BSvIqN[F]: page#10 acquire a W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:773:Remove] INFO  - page#10 en-stack.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:787:Remove] INFO  - [BSvIqN[F]: page#8 acquire a W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:802:Remove] INFO  - [BSvIqN[F]: lands page#8.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:1723:MergedWithRightSibling] INFO  - page#9 is deleted.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:1124:Remove] INFO  - [BSvIqN[F]: old/new first key: 6, 6.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:2391:TreeHeightTrim] INFO  - stale root page cnt: 0. cur root: 15
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:696:UnpinPages] INFO  - total un-pin cnt: 5.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:1206:Remove] INFO  - find remove path 5.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:712:Remove] INFO  - [VSHdoGTg]: attempts remove k:  3. rem quota: 50
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:733:Remove] INFO  - [VSHdoGTg]: buffer get buffer pool reserve.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:755:Remove] INFO  - [VSHdoGTg]: page#15 acquire a W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:773:Remove] INFO  - page#15 en-stack.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:787:Remove] INFO  - [VSHdoGTg]: page#7 acquire a W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:773:Remove] INFO  - page#7 en-stack.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:787:Remove] INFO  - [VSHdoGTg]: page#6 acquire a W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:773:Remove] INFO  - page#6 en-stack.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:787:Remove] INFO  - [VSHdoGTg]: page#4 acquire a W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:802:Remove] INFO  - [VSHdoGTg]: lands page#4.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:1723:MergedWithRightSibling] INFO  - page#5 is deleted.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:1124:Remove] INFO  - [VSHdoGTg]: old/new first key: 4, 4.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:2391:TreeHeightTrim] INFO  - stale root page cnt: 0. cur root: 15
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:696:UnpinPages] INFO  - total un-pin cnt: 5.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:1206:Remove] INFO  - find remove path 5.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:712:Remove] INFO  - [IuKfTKjx]: attempts remove k:  4. rem quota: 50
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:733:Remove] INFO  - [IuKfTKjx]: buffer get buffer pool reserve.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:755:Remove] INFO  - [IuKfTKjx]: page#15 acquire a W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:773:Remove] INFO  - page#15 en-stack.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:787:Remove] INFO  - [IuKfTKjx]: page#7 acquire a W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:773:Remove] INFO  - page#7 en-stack.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:787:Remove] INFO  - [IuKfTKjx]: page#6 acquire a W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:773:Remove] INFO  - page#6 en-stack.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:787:Remove] INFO  - [IuKfTKjx]: page#4 acquire a W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:802:Remove] INFO  - [IuKfTKjx]: lands page#4.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:1723:MergedWithRightSibling] INFO  - page#8 is deleted.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:1723:MergedWithRightSibling] INFO  - page#10 is deleted.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:2391:TreeHeightTrim] INFO  - stale root page cnt: 0. cur root: 15
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:696:UnpinPages] INFO  - total un-pin cnt: 5.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:712:Remove] INFO  - [_wvK]pQh]: attempts remove k:  10. rem quota: 50
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:733:Remove] INFO  - [_wvK]pQh]: buffer get buffer pool reserve.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:755:Remove] INFO  - [_wvK]pQh]: page#15 acquire a W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:773:Remove] INFO  - page#15 en-stack.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:787:Remove] INFO  - [_wvK]pQh]: page#14 acquire a W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:773:Remove] INFO  - page#14 en-stack.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/buffer/buffer_pool_manager_instance.cpp:143:FetchPgImp] INFO  - read page#10
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/disk/disk_manager.cpp:104:ReadPage] DEBUG - I/O error reading past end of file
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:787:Remove] INFO  - [_wvK]pQh]: page#10 acquire a W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:773:Remove] INFO  - page#0 en-stack.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:787:Remove] INFO  - [_wvK]pQh]: page#0 acquire a W-latch.
+46: 2024-08-15 08:19:47 [autograder/source/bustub/src/storage/index/b_plus_tree.cpp:773:Remove] INFO  - page#0 en-stack.
+46: terminate called after throwing an instance of 'std::system_error'
+46:   what():  Resource deadlock avoided
+1/1 Test #46: BPlusTreeTestsCP2.DeleteTest3 ....Subprocess aborted***Exception:   0.01 sec
+
+0% tests passed, 1 tests failed out of 1
+
+Total Test time (real) =   0.02 sec
+
+The following tests FAILED:
+	 46 - BPlusTreeTestsCP2.DeleteTest3 (Subprocess aborted)
+Errors while running CTest
+Output from these tests are in: /autograder/source/bustub/build/Testing/Temporary/LastTest.log
+Use "--rerun-failed --output-on-failure" to re-run the failed cases verbosely.
+
+Program exited with 8 in 0.022s

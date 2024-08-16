@@ -13,7 +13,10 @@ namespace bustub {
  */
 INDEX_TEMPLATE_ARGUMENTS
 // INDEXITERATOR_TYPE::IndexIterator() = default;
-INDEXITERATOR_TYPE::IndexIterator() : cur_leaf_page_ptr_(nullptr), cur_offset_(0), end_flag_(true) {}
+INDEXITERATOR_TYPE::IndexIterator() : cur_leaf_page_ptr_(nullptr), cur_offset_(0), end_flag_(true) {
+  this_quota_.store(0);
+  ret_to_ = nullptr;
+}
 
 INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::IndexIterator(BufferPoolManager *mng, BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *ptr,
@@ -22,8 +25,8 @@ INDEXITERATOR_TYPE::IndexIterator(BufferPoolManager *mng, BPlusTreeLeafPage<KeyT
   this_quota_.store(this_quota);
   buffer_pool_manager_->FetchPage(cur_leaf_page_ptr_->GetPageId());
   reinterpret_cast<Page *>(cur_leaf_page_ptr_)->RLatch();
-  LOG_INFO("page#%d acquire a R-latch. pin cnt: %d.", cur_leaf_page_ptr_->GetPageId(),
-           reinterpret_cast<Page *>(cur_leaf_page_ptr_)->GetPinCount());
+  LOG_INFO("page#%d acquire a R-latch. pin cnt: %d. this_quota: %ld", cur_leaf_page_ptr_->GetPageId(),
+           reinterpret_cast<Page *>(cur_leaf_page_ptr_)->GetPinCount(), this_quota_.load());
 }
 
 INDEX_TEMPLATE_ARGUMENTS

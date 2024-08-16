@@ -146,6 +146,7 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
   replacer_->SetEvictable(corresponding_f_id, false);
   replacer_->RecordAccess(corresponding_f_id);
   page_table_->Insert(page_id, corresponding_f_id);
+  LOG_INFO("read page#%d ok", page_id);
 
   latch_.unlock();
   return &pages_[corresponding_f_id];
@@ -227,6 +228,7 @@ void BufferPoolManagerInstance::FlushAllPgsImp() {
 auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool {
   std::scoped_lock<std::mutex> lock(latch_);
   frame_id_t corresponding_f_id;
+  LOG_INFO("delete page#%d", page_id);
   /*
     If page_id is not in the buffer pool,
     if the page is pinned.
