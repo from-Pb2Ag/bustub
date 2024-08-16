@@ -156,6 +156,14 @@ class BPlusTree {
   void UnlatchRootPage();
 
   /*
+    find `pid`'s corresponding `Page*` ptr in `cached_ptr`. If can not find update `cached_ptr`,
+    as well as `unpin_coll` which is responsible for un-pin pages in the end of the outer function call.
+    And W-latch it as soon as we can.
+  */
+  auto FastFetchWithWLatch(page_id_t pid, std::unordered_map<bustub::page_id_t, bustub::Page *> *cached_ptr,
+                           std::unordered_map<bustub::page_id_t, bustub::Page *> *unpin_coll) -> Page *;
+
+  /*
     only called in `remove` function. since remove CAN make root page only has one child page,
     then the root page is stale. we save these root(s) in `stale_root_coll`.
   */

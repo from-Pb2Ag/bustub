@@ -25,15 +25,15 @@ INDEXITERATOR_TYPE::IndexIterator(BufferPoolManager *mng, BPlusTreeLeafPage<KeyT
   this_quota_.store(this_quota);
   buffer_pool_manager_->FetchPage(cur_leaf_page_ptr_->GetPageId());
   reinterpret_cast<Page *>(cur_leaf_page_ptr_)->RLatch();
-  LOG_INFO("page#%d acquire a R-latch. pin cnt: %d. this_quota: %ld", cur_leaf_page_ptr_->GetPageId(),
-           reinterpret_cast<Page *>(cur_leaf_page_ptr_)->GetPinCount(), this_quota_.load());
+  // LOG_INFO("page#%d acquire a R-latch. pin cnt: %d. this_quota: %ld", cur_leaf_page_ptr_->GetPageId(),
+  //          reinterpret_cast<Page *>(cur_leaf_page_ptr_)->GetPinCount(), this_quota_.load());
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 // INDEXITERATOR_TYPE::~IndexIterator() = default;  // NOLINT
 INDEXITERATOR_TYPE::~IndexIterator() {
   if (ret_to_ != nullptr) {
-    LOG_INFO("return %ld pages to buffer pool.", this_quota_.load());
+    // LOG_INFO("return %ld pages to buffer pool.", this_quota_.load());
     ret_to_->fetch_add(this_quota_.load());
   }
 }
@@ -61,8 +61,8 @@ auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
   size_t offset_value = cur_offset_.load(std::memory_order_seq_cst);
   if (offset_value >= static_cast<size_t>(cur_leaf_page_ptr_->GetSize())) {
     page_id_t next_page_id = cur_leaf_page_ptr_->GetNextPageId();
-    LOG_INFO("page#%d release a R-latch. pin cnt: %d.", cur_leaf_page_ptr_->GetPageId(),
-             reinterpret_cast<Page *>(cur_leaf_page_ptr_)->GetPinCount());
+    // LOG_INFO("page#%d release a R-latch. pin cnt: %d.", cur_leaf_page_ptr_->GetPageId(),
+    //          reinterpret_cast<Page *>(cur_leaf_page_ptr_)->GetPinCount());
     reinterpret_cast<Page *>(cur_leaf_page_ptr_)->RUnlatch();
     buffer_pool_manager_->UnpinPage(cur_leaf_page_ptr_->GetPageId(), false);
 
@@ -73,8 +73,8 @@ auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
       cur_leaf_page_ptr_ = reinterpret_cast<BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *>(
           buffer_pool_manager_->FetchPage(next_page_id));
       reinterpret_cast<Page *>(cur_leaf_page_ptr_)->RLatch();
-      LOG_INFO("page#%d acquire a R-latch. pin cnt: %d.", cur_leaf_page_ptr_->GetPageId(),
-               reinterpret_cast<Page *>(cur_leaf_page_ptr_)->GetPinCount());
+      // LOG_INFO("page#%d acquire a R-latch. pin cnt: %d.", cur_leaf_page_ptr_->GetPageId(),
+      //          reinterpret_cast<Page *>(cur_leaf_page_ptr_)->GetPinCount());
       cur_offset_.store(0, std::memory_order_seq_cst);
     }
   }
@@ -85,7 +85,6 @@ auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
 
 INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::operator==(const IndexIterator &itr) const -> bool {
-  //   LOG_INFO("what fuck? `==`");
   if (itr.IsEnd()) {
     return IsEnd();
   }
@@ -94,7 +93,6 @@ auto INDEXITERATOR_TYPE::operator==(const IndexIterator &itr) const -> bool {
 
 INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::operator!=(const IndexIterator &itr) const -> bool {
-  //   LOG_INFO("what fuck? `!=`");
   if (itr.IsEnd()) {
     // LOG_INFO("this end? %d. who to comp? %d", IsEnd(), itr.IsEnd());
     return !IsEnd();

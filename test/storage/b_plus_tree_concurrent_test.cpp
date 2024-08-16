@@ -351,7 +351,7 @@ TEST(BPlusTreeConcurrentTest, RandomDeleteTest) {
   auto header_page = bpm->NewPage(&page_id);
   (void)header_page;
 
-  int64_t scale_factor = 256;
+  int64_t scale_factor = 512;
   std::random_device rd;
   std::mt19937 gen1(rd());
   // std::mt19937 gen2(rd());
@@ -387,7 +387,10 @@ TEST(BPlusTreeConcurrentTest, RandomDeleteTest) {
 
   file.close();
 
-  InsertHelper(&tree, keys);
+  // InsertHelper(&tree, keys);
+  LaunchParallelTest(8, InsertHelper, &tree, keys);
+
+  tree.PrintGraphUtil();
 
   int64_t rem_end_offset = scale_factor >> 2;
   std::vector<int64_t> remove_keys = std::vector<int64_t>(keys.begin(), keys.begin() + rem_end_offset);
@@ -395,7 +398,9 @@ TEST(BPlusTreeConcurrentTest, RandomDeleteTest) {
   std::sort(remain_keys.begin(), remain_keys.end());
 
   LOG_INFO("insert phase end");
-  LaunchParallelTest(2, DeleteHelper, &tree, remove_keys);
+  LaunchParallelTest(1, DeleteHelper, &tree, remove_keys);
+
+  tree.PrintGraphUtil();
 
   LOG_INFO("remove phase end");
   int64_t start_key = remain_keys[0];

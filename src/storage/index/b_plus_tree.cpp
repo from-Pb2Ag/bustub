@@ -45,7 +45,8 @@ INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *transaction) -> bool {
   auto signatures = GenerateNRandomString(1);
   std::string signature = signatures[0];
-  LOG_INFO("[%s]: attempts get value of key %ld. rem_quota: %ld.", signature.c_str(), key.ToString(), rem_cnt_.load());
+  // LOG_INFO("[%s]: attempts get value of key %ld. rem_quota: %ld.", signature.c_str(), key.ToString(),
+  // rem_cnt_.load());
   Page *ptr = nullptr;
   Page *tmp = nullptr;
   std::atomic<size_t> prime_quota = 2;
@@ -57,13 +58,13 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
     }
 
     rem_cnt_.fetch_sub(prime_quota);
-    LOG_INFO("[%s]: reserved frames. now rem_quota: %ld.", signature.c_str(), rem_cnt_.load());
+    // LOG_INFO("[%s]: reserved frames. now rem_quota: %ld.", signature.c_str(), rem_cnt_.load());
     break;
   } while (true);
 
   ptr = buffer_pool_manager_->FetchPage(root_page_id_);
   ptr->RLatch();
-  LOG_INFO("[%s]: page#%d acquire a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(), ptr->GetPinCount());
+  // LOG_INFO("[%s]: page#%d acquire a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(), ptr->GetPinCount());
 
   do {
     auto *tmp_ptr = reinterpret_cast<BPlusTreePage *>(ptr);
@@ -77,19 +78,19 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
       // ----
       // tmp is parent.
       ptr->RLatch();
-      LOG_INFO("[%s]: page#%d acquire a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(),
-               ptr->GetPinCount());
+      // LOG_INFO("[%s]: page#%d acquire a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(),
+      //          ptr->GetPinCount());
       tmp->RUnlatch();
       buffer_pool_manager_->UnpinPage(tmp->GetPageId(), false);
-      LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), tmp->GetPageId(),
-               tmp->GetPinCount());
+      // LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), tmp->GetPageId(),
+      //          tmp->GetPinCount());
       // ----
       buffer_pool_manager_->UnpinPage(tmp->GetPageId(), false);
       if (ptr_2_internal->ValueAt(ret.first) == INVALID_PAGE_ID) {
         ptr->RUnlatch();
         buffer_pool_manager_->UnpinPage(ptr->GetPageId(), false);
-        LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(),
-                 ptr->GetPinCount());
+        // LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(),
+        //          ptr->GetPinCount());
         rem_cnt_.fetch_add(prime_quota);
         buffer_pool_page_quota_.notify_one();
         return false;
@@ -112,8 +113,8 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
           result->push_back(this_value);
           ptr->RUnlatch();
           buffer_pool_manager_->UnpinPage(ptr_2_leaf->GetPageId(), false);
-          LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(),
-                   ptr->GetPinCount());
+          // LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(),
+          //          ptr->GetPinCount());
           rem_cnt_.fetch_add(prime_quota);
           buffer_pool_page_quota_.notify_one();
           return true;
@@ -121,8 +122,8 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
         if (comp < 0) {
           ptr->RUnlatch();
           buffer_pool_manager_->UnpinPage(ptr_2_leaf->GetPageId(), false);
-          LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(),
-                   ptr->GetPinCount());
+          // LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(),
+          //          ptr->GetPinCount());
           rem_cnt_.fetch_add(prime_quota);
           buffer_pool_page_quota_.notify_one();
           return false;
@@ -130,8 +131,8 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
       }
       ptr->RUnlatch();
       buffer_pool_manager_->UnpinPage(ptr_2_leaf->GetPageId(), false);
-      LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(),
-               ptr->GetPinCount());
+      // LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(),
+      //          ptr->GetPinCount());
       rem_cnt_.fetch_add(prime_quota);
       buffer_pool_page_quota_.notify_one();
       return false;
@@ -140,7 +141,7 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
 
   ptr->RUnlatch();
   buffer_pool_manager_->UnpinPage(ptr->GetPageId(), false);
-  LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(), ptr->GetPinCount());
+  // LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(), ptr->GetPinCount());
   rem_cnt_.fetch_add(prime_quota);
   buffer_pool_page_quota_.notify_one();
   return false;
@@ -182,7 +183,7 @@ INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transaction *transaction) -> bool {
   auto signatures = GenerateNRandomString(1);
   std::string signature = signatures[0];
-  LOG_INFO("[%s]: attempts insert kv: %ld. cur depth: %ld", signature.c_str(), key.ToString(), cur_height_.load());
+  // LOG_INFO("[%s]: attempts insert kv: %ld. cur depth: %ld", signature.c_str(), key.ToString(), cur_height_.load());
   // FinalAction final_action(this);
 
   if (IsEmpty()) {
@@ -192,13 +193,11 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
           buffer_pool_manager_->NewPage(&root_page_id_));
       Page *ptr = reinterpret_cast<Page *>(ptr_2_leaf);
       ptr->WLatch();
-      LOG_INFO("[%s]: page#%d acquire a W-latch and new. pin cnt: %d", signature.c_str(), ptr->GetPageId(),
-               ptr->GetPinCount());
-      // LOG_INFO("page#%d latch.", ptr->GetPageId());
+      // LOG_INFO("[%s]: page#%d acquire a W-latch and new. pin cnt: %d", signature.c_str(), ptr->GetPageId(),
+      //          ptr->GetPinCount());
       root_locked_.store(static_cast<size_t>(RootLockType::WRITE_LOCKED));
       UpdateRootPageId();
 
-      // LOG_INFO("1update root page id: %d", root_page_id_);
       ptr_2_leaf->Init(root_page_id_, INVALID_PAGE_ID, leaf_max_size_);
 
       ptr_2_leaf->SetKeyAt(0, key);
@@ -207,15 +206,13 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
 
       ptr_2_leaf->SetNextPageId(INVALID_PAGE_ID);
 
-      // LogLeafPage(ptr_2_leaf);
       root_locked_.store(static_cast<size_t>(RootLockType::UN_LOCKED));
       cur_height_.fetch_add(1);
-      // LOG_INFO("page#%d un-latch.", ptr->GetPageId());
-      LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
+      // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
       ptr->WUnlatch();
       buffer_pool_manager_->UnpinPage(root_page_id_, true);
       is_empty_.store(false);
-      LOG_INFO("[%s]: attempts insert kv: %ld. success path 1.", signature.c_str(), key.ToString());
+      // LOG_INFO("[%s]: attempts insert kv: %ld. success path 1.", signature.c_str(), key.ToString());
       return true;
     }
   }
@@ -236,19 +233,19 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   do {
     std::unique_lock<std::mutex> lock(mux_);
     while (rem_cnt_.load() < prime_quota) {
-      LOG_INFO("[%s]: buffer pool is stained, sleep.", signature.c_str());
+      // LOG_INFO("[%s]: buffer pool is stained, sleep.", signature.c_str());
       buffer_pool_page_quota_.wait(lock);
     }
 
     rem_cnt_.fetch_sub(prime_quota);
-    LOG_INFO("[%s]: buffer get buffer pool reserve.", signature.c_str());
+    // LOG_INFO("[%s]: buffer get buffer pool reserve.", signature.c_str());
     break;
   } while (true);
 
   do {
     std::unique_lock<std::mutex> lock(mux_);
     while (root_locked_.load() != static_cast<size_t>(RootLockType::UN_LOCKED)) {
-      LOG_INFO("[%s]: root page is locked, sleep.", signature.c_str());
+      // LOG_INFO("[%s]: root page is locked, sleep.", signature.c_str());
       c_v_.wait(lock);
     }
 
@@ -264,17 +261,16 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
 
     ptr->WLatch();
     op_id_++;
-    LOG_INFO("[%s]: root page#%d acquire a W-latch. pin cnt: %d", signature.c_str(), ptr->GetPageId(),
-             ptr->GetPinCount());
-    if (!reinterpret_cast<BPlusTreePage *>(ptr)->IsLeafPage()) {
-      LogInternalPage(reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(ptr));
-    }
+    // LOG_INFO("[%s]: root page#%d acquire a W-latch. pin cnt: %d", signature.c_str(), ptr->GetPageId(),
+    //          ptr->GetPinCount());
+    // if (!reinterpret_cast<BPlusTreePage *>(ptr)->IsLeafPage()) {
+    //   LogInternalPage(reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(ptr));
+    // }
     break;
   } while (true);
 
   if (unpin_is_dirty.find(root_page_id_) == unpin_is_dirty.end()) {
     unpin_is_dirty.insert({root_page_id_, false});
-    // LOG_INFO("pin page #%d", root_page_id_);
   }
 
   std::vector<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *> st;
@@ -300,7 +296,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
           if (i == 0) {
             UnlatchRootPage();
           }
-          LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
+          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
           damn->WUnlatch();
         }
         UnpinPages(unpin_coll, signature);
@@ -308,15 +304,11 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
         rem_cnt_.fetch_add(prime_quota);
         buffer_pool_page_quota_.notify_one();
 
-        LOG_INFO("[%s]: attempts insert kv: %ld. fail path 1.", signature.c_str(), key.ToString());
+        // LOG_INFO("[%s]: attempts insert kv: %ld. fail path 1.", signature.c_str(), key.ToString());
         return false;
       }
 
       page_id_t nxt_level_page = ptr_2_internal->ValueAt(ret.first);
-      // LOG_INFO("[%s]: op #%d attempts insert kv: %ld. ####. fetch page?%d", signature.c_str(), op_id_,
-      // key.ToString(),
-      //          nxt_level_page);
-      // bool damn_it = false;
       if (auto it = cached_ptr.find(nxt_level_page); it != cached_ptr.end()) {
         ptr = it->second;
       } else {
@@ -327,7 +319,8 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
       }
 
       ptr->WLatch();
-      LOG_INFO("[%s]: page#%d acquire a W-latch. pin cnt: %d", signature.c_str(), ptr->GetPageId(), ptr->GetPinCount());
+      // LOG_INFO("[%s]: page#%d acquire a W-latch. pin cnt: %d", signature.c_str(), ptr->GetPageId(),
+      // ptr->GetPinCount());
 
       // if `ptr` will not split. unlock its ancestors' W latch.
       // then un-pin them (not dirty) with fast path.
@@ -341,13 +334,12 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
             UnlatchRootPage();
           }
 
-          LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
+          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
           damn->WUnlatch();
           // buffer_pool_manager_->UnpinPage(damn_pid, false);
           // unpin_coll.erase(damn_pid);
           // un_pin_cnt.fetch_add(1);
         }
-        // LOG_INFO("fast path un-pin %ld pages.", un_pin_cnt.load());
         // prime_quota.fetch_sub(un_pin_cnt.load());
         // rem_cnt_.fetch_add(un_pin_cnt.load());
         // buffer_pool_page_quota_.notify_one();
@@ -357,7 +349,6 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
 
       if (unpin_is_dirty.find(ptr->GetPageId()) == unpin_is_dirty.end()) {
         unpin_is_dirty.insert({ptr->GetPageId(), false});
-        // LOG_INFO("pin page #%d", ptr->GetPageId());
       }
       if (ptr->GetPageId() == 0) {
         break;
@@ -377,7 +368,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
         if (i == 0) {
           UnlatchRootPage();
         }
-        LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
+        // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
         damn->WUnlatch();
       }
       /*
@@ -387,14 +378,14 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
       if (st.empty()) {
         UnlatchRootPage();
       }
-      LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
+      // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
       ptr->WUnlatch();
       UnpinPages(unpin_coll, signature);
 
       rem_cnt_.fetch_add(prime_quota);
       buffer_pool_page_quota_.notify_one();
 
-      LOG_INFO("[%s]: attempts insert kv: %ld. fail path 2.", signature.c_str(), key.ToString());
+      // LOG_INFO("[%s]: attempts insert kv: %ld. fail path 2.", signature.c_str(), key.ToString());
       return false;
     }
 
@@ -402,8 +393,8 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
       [insert success] case 1: can insert in leaf page in safe.
       it is possible to insert a NEW SMALLEST KV in the not full FIRST leaf page!
     */
-    LOG_INFO("[%s]: check root page#%d. pin cnt: %d", signature.c_str(), cached_ptr[root_page_id_]->GetPageId(),
-             cached_ptr[root_page_id_]->GetPinCount());
+    // LOG_INFO("[%s]: check root page#%d. pin cnt: %d", signature.c_str(), cached_ptr[root_page_id_]->GetPageId(),
+    //          cached_ptr[root_page_id_]->GetPinCount());
     unpin_is_dirty.insert_or_assign(ptr_2_leaf->GetPageId(), true);
     if (ptr_2_leaf->GetSize() < ptr_2_leaf->GetMaxSize()) {
       std::atomic<size_t> un_pin_cnt = 0;
@@ -414,7 +405,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
           UnlatchRootPage();
         }
 
-        LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
+        // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
         damn->WUnlatch();
         // buffer_pool_manager_->UnpinPage(damn_pid, false);
         // unpin_coll.erase(damn_pid);
@@ -442,8 +433,8 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
       ptr_2_leaf->SetKeyAt(ret.first, key);
       ptr_2_leaf->SetValueAt(ret.first, value);
       ptr_2_leaf->IncreaseSize(1);
-      LOG_INFO("[%s]: check root page#%d. pin cnt: %d", signature.c_str(), cached_ptr[root_page_id_]->GetPageId(),
-               cached_ptr[root_page_id_]->GetPinCount());
+      // LOG_INFO("[%s]: check root page#%d. pin cnt: %d", signature.c_str(), cached_ptr[root_page_id_]->GetPageId(),
+      //          cached_ptr[root_page_id_]->GetPinCount());
       // if (ret.first == 0) {
       KeyType new_key = ptr_2_leaf->KeyAt(0);
       PopulateUpV2(ptr_2_leaf, old_key, new_key);
@@ -452,17 +443,16 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
       if (ptr_2_leaf->GetParentPageId() == INVALID_PAGE_ID) {
         UnlatchRootPage();
       }
-      LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
+      // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
       ptr->WUnlatch();
-      LOG_INFO("[%s]: check root page#%d. pin cnt: %d", signature.c_str(), cached_ptr[root_page_id_]->GetPageId(),
-               cached_ptr[root_page_id_]->GetPinCount());
+      // LOG_INFO("[%s]: check root page#%d. pin cnt: %d", signature.c_str(), cached_ptr[root_page_id_]->GetPageId(),
+      //          cached_ptr[root_page_id_]->GetPinCount());
 
       UnpinPages(unpin_coll, signature);
-      // LOG_INFO("[%s]: attempts insert kv: %ld. ok2.", signature.c_str(), key.ToString());
       rem_cnt_.fetch_add(prime_quota);
       buffer_pool_page_quota_.notify_one();
 
-      LOG_INFO("[%s]: attempts insert kv: %ld. success path 2.", signature.c_str(), key.ToString());
+      // LOG_INFO("[%s]: attempts insert kv: %ld. success path 2.", signature.c_str(), key.ToString());
       return true;
     }
     // A = ptr_2_leaf->GetMaxSize() + 1. => [0, A / 2), [A / 2, A).
@@ -481,7 +471,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     page_id_t neww_page = INVALID_PAGE_ID;
 
     Page *neww_ptr = buffer_pool_manager_->NewPage(&neww_page);
-    LOG_INFO("new a page#%d ", neww_ptr->GetPageId());
+    // LOG_INFO("new a page#%d ", neww_ptr->GetPageId());
     cached_ptr.insert({neww_page, neww_ptr});
     unpin_coll.insert({neww_page, neww_ptr});
     // Page *next_ptr = buffer_pool_manager_->FetchPage(next_page);
@@ -498,7 +488,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     auto *neww_page_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(neww_ptr);
 
     if (neww_page_ptr == nullptr) {
-      LOG_INFO("neww_page id: %d", neww_page);
+      // LOG_INFO("neww_page id: %d", neww_page);
       throw std::runtime_error("Pointer neww_page_ptr is null.");
     }
 
@@ -551,10 +541,9 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     */
     if (ptr_2_leaf->GetParentPageId() == INVALID_PAGE_ID) {
       Page *tmp = buffer_pool_manager_->NewPage(&root_page_id_);
-      LOG_INFO("new a page#%d ", tmp->GetPageId());
+      // LOG_INFO("new a page#%d ", tmp->GetPageId());
       cached_ptr.insert({root_page_id_, tmp});
       unpin_coll.insert({root_page_id_, tmp});
-      // LOG_INFO("[%s]: 2update root page id: %d", signature.c_str(), root_page_id_);
       UpdateRootPageId();
 
       auto *new_root = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(tmp);
@@ -576,22 +565,20 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
         if (i == 0) {
           UnlatchRootPage();
         }
-        LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
+        // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
         damn->WUnlatch();
       }
 
       if (st.empty()) {
         UnlatchRootPage();
       }
-      LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
+      // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
       ptr->WUnlatch();
-      // LOG_INFO("[%s]: UnpinPages case4", signature.c_str());
       UnpinPages(unpin_coll, signature);
-      // LOG_INFO("[%s]: attempts insert kv: %ld. ok3.", signature.c_str(), key.ToString());
       rem_cnt_.fetch_add(prime_quota);
       buffer_pool_page_quota_.notify_one();
 
-      LOG_INFO("[%s]: attempts insert kv: %ld. success path 3.", signature.c_str(), key.ToString());
+      // LOG_INFO("[%s]: attempts insert kv: %ld. success path 3.", signature.c_str(), key.ToString());
       return true;
     }
     /*
@@ -607,18 +594,17 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
       if (i == 0) {
         UnlatchRootPage();
       }
-      LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
+      // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
       damn->WUnlatch();
     }
-    LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
+    // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
     ptr->WUnlatch();
 
     UnpinPages(unpin_coll, signature);
-    // LOG_INFO("[%s]: attempts insert kv: %ld. ok4.", signature.c_str(), key.ToString());
     rem_cnt_.fetch_add(prime_quota);
     buffer_pool_page_quota_.notify_one();
 
-    LOG_INFO("[%s]: attempts insert kv: %ld. success path 4.", signature.c_str(), key.ToString());
+    // LOG_INFO("[%s]: attempts insert kv: %ld. success path 4.", signature.c_str(), key.ToString());
     return true;
   } while (true);
 
@@ -630,18 +616,16 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     if (i == 0) {
       UnlatchRootPage();
     }
-    LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
+    // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
     damn->WUnlatch();
   }
-  LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
+  // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
   ptr->WUnlatch();
-  // LOG_INFO("[%s]: UnpinPages case6", signature.c_str());
   UnpinPages(unpin_coll, signature);
-  // LOG_INFO("[%s]: attempts insert kv: %ld. return path 2", signature.c_str(), key.ToString());
   rem_cnt_.fetch_add(prime_quota);
   buffer_pool_page_quota_.notify_one();
 
-  LOG_INFO("[%s]: attempts insert kv: %ld. fail path 3.", signature.c_str(), key.ToString());
+  // LOG_INFO("[%s]: attempts insert kv: %ld. fail path 3.", signature.c_str(), key.ToString());
   return false;
 }
 
@@ -724,9 +708,9 @@ INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::UnpinPages(const std::unordered_map<page_id_t, Page *> &unpin_coll, const std::string &sig) {
   for (const auto &[pid, ptr] : unpin_coll) {
     buffer_pool_manager_->UnpinPage(pid, true);
-    LOG_INFO("[%s]: fuck, un-pin page #%d. now pin cnt: %d", sig.c_str(), pid, ptr->GetPinCount());
+    // LOG_INFO("[%s]: fuck, un-pin page #%d. now pin cnt: %d", sig.c_str(), pid, ptr->GetPinCount());
   }
-  LOG_INFO("total un-pin cnt: %ld.", unpin_coll.size());
+  // LOG_INFO("total un-pin cnt: %ld.", unpin_coll.size());
 }
 /*****************************************************************************
  * REMOVE
@@ -742,11 +726,11 @@ INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
   auto signatures = GenerateNRandomString(1);
   std::string signature = signatures[0];
-  LOG_INFO("[%s]: attempts remove k:  %ld. rem quota: %ld", signature.c_str(), key.ToString(), rem_cnt_.load());
+  // LOG_INFO("[%s]: attempts remove k:  %ld. rem quota: %ld", signature.c_str(), key.ToString(), rem_cnt_.load());
   // FinalAction final_action(this);
 
   if (IsEmpty()) {
-    LOG_INFO("empty remove path 1.");
+    // LOG_INFO("empty remove path 1.");
     return;
   }
 
@@ -759,35 +743,28 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
   do {
     std::unique_lock<std::mutex> lock(mux_);
     while (rem_cnt_.load() < prime_quota) {
-      LOG_INFO("[%s]: buffer pool is strained, sleep.", signature.c_str());
+      // LOG_INFO("[%s]: buffer pool is strained, sleep.", signature.c_str());
       buffer_pool_page_quota_.wait(lock);
     }
 
     rem_cnt_.fetch_sub(prime_quota);
-    LOG_INFO("[%s]: buffer get buffer pool reserve.", signature.c_str());
+    // LOG_INFO("[%s]: buffer get buffer pool reserve.", signature.c_str());
     break;
   } while (true);
 
   do {
     std::unique_lock<std::mutex> lock(mux_);
     while (root_locked_.load() != static_cast<size_t>(RootLockType::UN_LOCKED)) {
-      LOG_INFO("[%s]: root page is locked, sleep.", signature.c_str());
+      // LOG_INFO("[%s]: root page is locked, sleep.", signature.c_str());
       c_v_.wait(lock);
     }
     op_id_++;
 
     root_locked_.store(static_cast<size_t>(RootLockType::WRITE_LOCKED));
 
-    if (auto it = cached_ptr.find(root_page_id_); it != cached_ptr.end()) {
-      ptr = it->second;
-    } else {
-      ptr = buffer_pool_manager_->FetchPage(root_page_id_);
-      cached_ptr.insert({root_page_id_, ptr});
-      unpin_coll.insert({root_page_id_, ptr});
-    }
+    ptr = FastFetchWithWLatch(root_page_id_, &cached_ptr, &unpin_coll);
 
-    ptr->WLatch();
-    LOG_INFO("[%s]: page#%d acquire a W-latch.", signature.c_str(), ptr->GetPageId());
+    // LOG_INFO("[%s]: page#%d acquire a W-latch.", signature.c_str(), ptr->GetPageId());
     break;
   } while (true);
 
@@ -800,33 +777,22 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
   do {
     tmp_ptr = reinterpret_cast<BPlusTreePage *>(ptr);
 
-    // LOG_INFO("page id: %d", ptr->GetPageId());
     if (!tmp_ptr->IsLeafPage()) {
       ptr_2_internal = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(ptr);
       auto ret = FindFirstInfIndex(key, ptr_2_internal);
       st_1.push_back({ptr_2_internal, ret.first});
-      LOG_INFO("page#%d en-stack.", ptr_2_internal->GetPageId());
+      // LOG_INFO("page#%d en-stack.", ptr_2_internal->GetPageId());
 
       page_id_t nxt_level_page = ptr_2_internal->ValueAt(ret.first);
+      ptr = FastFetchWithWLatch(nxt_level_page, &cached_ptr, &unpin_coll);
 
-      if (auto it = cached_ptr.find(nxt_level_page); it != cached_ptr.end()) {
-        ptr = it->second;
-        LOG_INFO("[%s]: fuck page#%d A.", signature.c_str(), ptr->GetPageId());
-      } else {
-        ptr = buffer_pool_manager_->FetchPage(nxt_level_page);
-        cached_ptr.insert({nxt_level_page, ptr});
-        unpin_coll.insert({nxt_level_page, ptr});
-        LOG_INFO("[%s]: fuck page#%d B.", signature.c_str(), ptr->GetPageId());
-      }
-
-      ptr->WLatch();
       tmp_ptr = reinterpret_cast<BPlusTreePage *>(ptr);
-      LOG_INFO("[%s]: page#%d acquire a W-latch.", signature.c_str(), ptr->GetPageId());
-      if (!tmp_ptr->IsLeafPage()) {
-        LogInternalPage(reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(tmp_ptr));
-      } else {
-        LogLeafPage(reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(tmp_ptr));
-      }
+      // LOG_INFO("[%s]: page#%d acquire a W-latch.", signature.c_str(), ptr->GetPageId());
+      // if (!tmp_ptr->IsLeafPage()) {
+      //   LogInternalPage(reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(tmp_ptr));
+      // } else {
+      //   LogLeafPage(reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(tmp_ptr));
+      // }
       auto peek_ptr = reinterpret_cast<BPlusTreePage *>(ptr);
       if (peek_ptr->GetSize() > peek_ptr->GetMinSize()) {
         for (size_t i = next_unlock_idx; i < st_1.size(); i++) {
@@ -835,19 +801,19 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
             UnlatchRootPage();
           }
 
-          LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
+          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
           damn->WUnlatch();
         }
         next_unlock_idx = st_1.size();
       }
     } else {
-      LOG_INFO("[%s]: lands page#%d.", signature.c_str(), ptr->GetPageId());
+      // LOG_INFO("[%s]: lands page#%d.", signature.c_str(), ptr->GetPageId());
       auto ptr_2_leaf = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(ptr);
 
       size_t index_for_key = 0;
       bool find = false;
       int dst_index = BinarySearch(key, ptr_2_leaf);
-      LogLeafPage(ptr_2_leaf);
+      // LogLeafPage(ptr_2_leaf);
 
       if (comparator_(key, ptr_2_leaf->KeyAt(dst_index)) == 0) {
         index_for_key = dst_index;
@@ -860,20 +826,20 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
           if (i == 0) {
             UnlatchRootPage();
           }
-          LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
+          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
           damn->WUnlatch();
         }
         if (st_1.empty()) {
           UnlatchRootPage();
         }
-        LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
+        // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
         ptr->WUnlatch();
         UnpinPages(unpin_coll, signature);
 
         rem_cnt_.fetch_add(prime_quota);
         buffer_pool_page_quota_.notify_one();
 
-        LOG_INFO("not found remove path 1.");
+        // LOG_INFO("not found remove path 1.");
         return;
       }
 
@@ -885,9 +851,6 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
         if the FIRST kv in leaf page is deleted, will look-up.
       */
       if (ptr_2_leaf->GetSize() >= ptr_2_leaf->GetMinSize() || ptr_2_leaf->IsRootPage()) {
-        // ptr_2_leaf->MoveBackward(index_for_key);
-        // ptr_2_leaf->IncreaseSize(-1);
-
         size_t populate_index = index_for_key;
         KeyType new_leaf_first_key = ptr_2_leaf->KeyAt(0);
         for (int i = st_1.size() - 1; i >= 0 && populate_index == 0; i--) {
@@ -899,13 +862,13 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
           if (i == 0) {
             UnlatchRootPage();
           }
-          LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
+          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
           damn->WUnlatch();
         }
         if (st_1.empty()) {
           UnlatchRootPage();
         }
-        LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
+        // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
         ptr->WUnlatch();
 
         UnpinPages(unpin_coll, signature);
@@ -913,7 +876,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
         rem_cnt_.fetch_add(prime_quota);
         buffer_pool_page_quota_.notify_one();
 
-        LOG_INFO("find remove path 1.");
+        // LOG_INFO("find remove path 1.");
         return;
       }
 
@@ -922,23 +885,16 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
         Page *prev_ptr = nullptr;
         BPlusTreeLeafPage<KeyType, RID, KeyComparator> *prev_leaf_ptr = nullptr;
 
-        if (auto it = cached_ptr.find(prev_page_id); it != cached_ptr.end()) {
-          prev_ptr = it->second;
-        } else {
-          prev_ptr = buffer_pool_manager_->FetchPage(prev_page_id);
-          prev_leaf_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(prev_ptr);
-          cached_ptr.insert({prev_page_id, prev_ptr});
-          unpin_coll.insert({prev_page_id, prev_ptr});
-        }
+        prev_ptr = FastFetchWithWLatch(prev_page_id, &cached_ptr, &unpin_coll);
+        prev_leaf_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(prev_ptr);
 
-        prev_ptr->WLatch();
-        LOG_INFO("[%s]: page#%d acquire a W-latch.", signature.c_str(), prev_ptr->GetPageId());
+        // LOG_INFO("[%s]: page#%d acquire a W-latch.", signature.c_str(), prev_ptr->GetPageId());
 
         // prev can "provide" the last one.
         // ptr_2_leaf page using it as the new first key (and look up.).
         assert(prev_leaf_ptr != nullptr);
         bool this_will_be_del = true;
-        LOG_INFO("[%s]: page#%d !!!!", signature.c_str(), prev_leaf_ptr->GetPageId());
+        // LOG_INFO("[%s]: page#%d !!!!", signature.c_str(), prev_leaf_ptr->GetPageId());
         if (prev_leaf_ptr->GetSize() > ptr_2_leaf->GetMinSize()) {
           this_will_be_del = false;
           KeyType mov_key = prev_leaf_ptr->KeyAt(prev_leaf_ptr->GetSize() - 1);
@@ -959,23 +915,23 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
             if (i == 0) {
               UnlatchRootPage();
             }
-            LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
+            // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
             damn->WUnlatch();
           }
 
           if (st_1.empty()) {
             UnlatchRootPage();
           }
-          LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), prev_ptr->GetPageId());
+          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), prev_ptr->GetPageId());
           prev_ptr->WUnlatch();
-          LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
+          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
           ptr->WUnlatch();
           UnpinPages(unpin_coll, signature);
 
           rem_cnt_.fetch_add(prime_quota);
           buffer_pool_page_quota_.notify_one();
 
-          LOG_INFO("find remove path 2.");
+          // LOG_INFO("find remove path 2.");
           return;
         }
 
@@ -994,8 +950,8 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
           st_1[i].first->IncreaseSize(-1);
           if (st_1[i].first->GetSize()) {
             KeyType new_first_key = st_1[i].first->KeyAt(0);
-            LOG_INFO("page#%d. old/new key: %ld, %ld", st_1[i].first->GetPageId(), old_first_key.ToString(),
-                     new_first_key.ToString());
+            // LOG_INFO("page#%d. old/new key: %ld, %ld", st_1[i].first->GetPageId(), old_first_key.ToString(),
+            //          new_first_key.ToString());
             PopulateUpV2(st_1[i].first, old_first_key, new_first_key);
           }
           if (st_1[i].first->GetSize() >= st_1[i].first->GetMinSize()) {
@@ -1042,7 +998,6 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
                 break;
               }
               MergedWithRightSibling(st_1[i].first, next_ptr);
-              // LogInternalPage(st_1[i].first);
               flag = false;
             }
           }
@@ -1055,8 +1010,8 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
           }
           unpin_coll.erase(tmp_ptr->GetPageId());
 
-          LOG_INFO("page#%d is deleted.", tmp_ptr->GetPageId());
-          LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), tmp_ptr->GetPageId());
+          // LOG_INFO("page#%d is deleted.", tmp_ptr->GetPageId());
+          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), tmp_ptr->GetPageId());
           tmp_ptr->WUnlatch();
           buffer_pool_manager_->DeletePage(tmp_ptr->GetPageId());
         }
@@ -1066,17 +1021,17 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
           if (i == 0) {
             UnlatchRootPage();
           }
-          LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
+          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
           damn->WUnlatch();
         }
         if (st_1.empty()) {
           UnlatchRootPage();
         }
 
-        LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), prev_ptr->GetPageId());
+        // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), prev_ptr->GetPageId());
         prev_ptr->WUnlatch();
         if (!this_will_be_del) {
-          LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
+          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
           ptr->WUnlatch();
         }
 
@@ -1084,7 +1039,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
         rem_cnt_.fetch_add(prime_quota);
         buffer_pool_page_quota_.notify_one();
 
-        LOG_INFO("find remove path 3.");
+        // LOG_INFO("find remove path 3.");
         return;
       }
 
@@ -1094,27 +1049,15 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
         Page *next_ptr = nullptr;
         BPlusTreeLeafPage<KeyType, RID, KeyComparator> *next_leaf_ptr = nullptr;
 
-        if (auto it = cached_ptr.find(next_page_id); it != cached_ptr.end()) {
-          next_ptr = it->second;
-        } else {
-          next_ptr = buffer_pool_manager_->FetchPage(next_page_id);
-          next_leaf_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(next_ptr);
-          cached_ptr.insert({next_page_id, next_ptr});
-          unpin_coll.insert({next_page_id, next_ptr});
-        }
+        next_ptr = FastFetchWithWLatch(next_page_id, &cached_ptr, &unpin_coll);
+        next_leaf_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(next_ptr);
 
-        next_ptr->WLatch();
-        LOG_INFO("[%s]: page#%d acquire a W-latch.", signature.c_str(), next_ptr->GetPageId());
-        // if (index_for_key == 0 && ptr_2_leaf->GetSize() > 0) {
-        //   // !!!
-        //   KeyType new_leaf_first_key = ptr_2_leaf->KeyAt(0);
-        //   FirstKeyPopulateUp(new_leaf_first_key, &st_1);
-        //   LOG_INFO("[%s]: new first key: %ld.", signature.c_str(), new_leaf_first_key.ToString());
-        // }
+        // LOG_INFO("[%s]: page#%d acquire a W-latch.", signature.c_str(), next_ptr->GetPageId());
+
         // next can "provide" the first one.
         assert(next_leaf_ptr != nullptr);
         bool next_will_be_del = true;
-        LOG_INFO("[%s]: page#%d !!!!", signature.c_str(), next_leaf_ptr->GetPageId());
+        // LOG_INFO("[%s]: page#%d !!!!", signature.c_str(), next_leaf_ptr->GetPageId());
         if (next_leaf_ptr->GetSize() > next_leaf_ptr->GetMinSize()) {
           next_will_be_del = false;
           KeyType mov_key = next_leaf_ptr->KeyAt(0);
@@ -1136,30 +1079,27 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
             if (i == 0) {
               UnlatchRootPage();
             }
-            LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
+            // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
             damn->WUnlatch();
           }
 
           if (st_1.empty()) {
             UnlatchRootPage();
           }
-          LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), next_ptr->GetPageId());
+          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), next_ptr->GetPageId());
           next_ptr->WUnlatch();
-          LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
+          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
           ptr->WUnlatch();
           UnpinPages(unpin_coll, signature);
 
           rem_cnt_.fetch_add(prime_quota);
           buffer_pool_page_quota_.notify_one();
 
-          LOG_INFO("find remove path 4.");
+          // LOG_INFO("find remove path 4.");
           return;
         }
         // merged with next page (next page is merged)?
         // and set flag as FALSE. if merged with next page toggle to FALSE.
-        // if (ptr_2_leaf->GetSize() == 0) {
-        //   PopulateUpV2(ptr_2_leaf, key, next_leaf_ptr->KeyAt(0));
-        // }
         MergedWithRightSibling(ptr_2_leaf, next_leaf_ptr);
         PopulateUpV2(ptr_2_leaf, key, ptr_2_leaf->KeyAt(0));
         bool flag = false;
@@ -1173,8 +1113,8 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
           }
           st_1[i].first->IncreaseSize(-1);
           KeyType new_first_key = st_1[i].first->KeyAt(0);
-          LOG_INFO("[%s]: old/new first key: %ld, %ld.", signature.c_str(), old_first_key.ToString(),
-                   new_first_key.ToString());
+          // LOG_INFO("[%s]: old/new first key: %ld, %ld.", signature.c_str(), old_first_key.ToString(),
+          //          new_first_key.ToString());
           PopulateUpV2(st_1[i].first, old_first_key, new_first_key);
 
           if (st_1[i].first->GetSize() >= st_1[i].first->GetMinSize()) {
@@ -1220,7 +1160,6 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
                 break;
               }
               MergedWithRightSibling(st_1[i].first, next_ptr);
-              // LogInternalPage(st_1[i].first);
               flag = false;
             }
           }
@@ -1233,8 +1172,8 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
           }
           unpin_coll.erase(tmp_ptr->GetPageId());
 
-          LOG_INFO("page#%d is deleted.", tmp_ptr->GetPageId());
-          LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), tmp_ptr->GetPageId());
+          // LOG_INFO("page#%d is deleted.", tmp_ptr->GetPageId());
+          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), tmp_ptr->GetPageId());
           tmp_ptr->WUnlatch();
           buffer_pool_manager_->DeletePage(tmp_ptr->GetPageId());
         }
@@ -1244,7 +1183,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
           if (i == 0) {
             UnlatchRootPage();
           }
-          LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
+          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
           damn->WUnlatch();
         }
         if (st_1.empty()) {
@@ -1252,17 +1191,17 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
         }
 
         if (!next_will_be_del) {
-          LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), next_ptr->GetPageId());
+          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), next_ptr->GetPageId());
           next_ptr->WUnlatch();
         }
-        LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
+        // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
         ptr->WUnlatch();
 
         UnpinPages(unpin_coll, signature);
         rem_cnt_.fetch_add(prime_quota);
         buffer_pool_page_quota_.notify_one();
 
-        LOG_INFO("find remove path 5.");
+        // LOG_INFO("find remove path 5.");
         return;
       }
       // !!!!
@@ -1275,16 +1214,8 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
           Page *next_ptr = nullptr;
           BPlusTreeLeafPage<KeyType, RID, KeyComparator> *next_leaf_ptr = nullptr;
 
-          if (auto it = cached_ptr.find(next_page_id); it != cached_ptr.end()) {
-            next_ptr = it->second;
-          } else {
-            next_ptr = buffer_pool_manager_->FetchPage(next_page_id);
-            next_ptr->WLatch();
-            LOG_INFO("[%s]: page#%d acquire a W-latch.", signature.c_str(), next_ptr->GetPageId());
-            next_leaf_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(next_ptr);
-            cached_ptr.insert({next_page_id, next_ptr});
-            unpin_coll.insert({next_page_id, next_ptr});
-          }
+          next_ptr = FastFetchWithWLatch(next_page_id, &cached_ptr, &unpin_coll);
+          next_leaf_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(next_ptr);
 
           assert(next_leaf_ptr != nullptr);
           if (next_leaf_ptr->GetSize() > next_leaf_ptr->GetMinSize()) {
@@ -1307,44 +1238,35 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
               if (i == 0) {
                 UnlatchRootPage();
               }
-              LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
+              // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
               damn->WUnlatch();
             }
 
             if (st_1.empty()) {
               UnlatchRootPage();
             }
-            LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), next_ptr->GetPageId());
+            // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), next_ptr->GetPageId());
             next_ptr->WUnlatch();
-            LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
+            // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
             ptr->WUnlatch();
             UnpinPages(unpin_coll, signature);
 
             rem_cnt_.fetch_add(prime_quota);
             buffer_pool_page_quota_.notify_one();
 
-            LOG_INFO("find remove path 4-1.");
+            // LOG_INFO("find remove path 4-1.");
             return;
           }
 
           page_id_t next_pr_pid = next_leaf_ptr->GetParentPageId();
-          LOG_INFO("XXXX");
           MergedWithRightSibling(ptr_2_leaf, next_leaf_ptr);
           // now `next_leaf_ptr` and `next_ptr` and invalid, since the page they point to is merged.
-
           Page *next_pr_ptr = nullptr;
           BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *next_pr_int_ptr = nullptr;
 
-          if (auto it = cached_ptr.find(next_pr_pid); it != cached_ptr.end()) {
-            next_pr_ptr = it->second;
-          } else {
-            next_pr_ptr = buffer_pool_manager_->FetchPage(next_pr_pid);
-            next_pr_ptr->WLatch();
-            LOG_INFO("[%s]: page#%d acquire a W-latch.", signature.c_str(), next_pr_ptr->GetPageId());
-            next_pr_int_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(next_pr_ptr);
-            cached_ptr.insert({next_pr_pid, next_pr_ptr});
-            unpin_coll.insert({next_pr_pid, next_pr_ptr});
-          }
+          next_pr_ptr = FastFetchWithWLatch(next_pr_pid, &cached_ptr, &unpin_coll);
+          next_pr_int_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(next_pr_ptr);
+
           assert(next_pr_int_ptr != nullptr);
           KeyType prev_key = next_pr_int_ptr->KeyAt(0);
 
@@ -1352,9 +1274,6 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
           next_pr_int_ptr->IncreaseSize(-1);
           if (next_pr_int_ptr->GetSize() > 0) {
             KeyType new_key = next_pr_int_ptr->KeyAt(0);
-            LOG_INFO("UHYBUYBYUBUYHB, old key: %ld", prev_key.ToString());
-            LogInternalPage(next_pr_int_ptr);
-            LOG_INFO("UHYBUYBYUBUYHB, new key: %ld", new_key.ToString());
             PopulateUpV2(next_pr_int_ptr, prev_key, new_key);
           }
 
@@ -1362,47 +1281,34 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
             if (next_pr_int_ptr->GetPageId() == st_1[i].first->GetPageId()) {
               // st_1[i].first->MoveBackward(st_1[i].second + 1);
               // st_1[i].first->IncreaseSize(-1);
-              LOG_INFO("????FWEF");
+              // LOG_INFO("????FWEF");
               break;
             }
             if (next_pr_int_ptr->GetSize() < next_pr_int_ptr->GetMinSize()) {
               next_pr_pid = next_pr_int_ptr->GetParentPageId();
-              LOG_INFO("YYYY");
               MergedWithRightSibling(st_1[i].first, next_pr_int_ptr);
 
               if (next_pr_pid == INVALID_PAGE_ID) {
                 break;
               }
 
-              // next_pr_int_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(
-              //     buffer_pool_manager_->FetchPage(next_pr_pid));
-              if (auto it = cached_ptr.find(next_pr_pid); it != cached_ptr.end()) {
-                next_pr_int_ptr =
-                    reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(it->second);
-              } else {
-                auto damn = buffer_pool_manager_->FetchPage(next_pr_pid);
-                damn->WLatch();
-                LOG_INFO("[%s]: page#%d acquire a W-latch.", signature.c_str(), damn->GetPageId());
-                next_pr_int_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(damn);
-                cached_ptr.insert({next_pr_pid, damn});
-                unpin_coll.insert({next_pr_pid, damn});
-              }
+              Page *damn = FastFetchWithWLatch(next_pr_pid, &cached_ptr, &unpin_coll);
+              next_pr_int_ptr = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(damn);
 
               // prev_key = next_pr_int_ptr->KeyAt(0);
               auto ret = FindFirstInfIndex(prev_key, next_pr_int_ptr);
               if (!ret.second) {
-                LOG_INFO("prev key: %ld. ret: [%d, %d].", prev_key.ToString(), ret.first, ret.second);
-                LogInternalPage(next_pr_int_ptr);
-                // assert(ret.first > 0);
+                // LOG_INFO("prev key: %ld. ret: [%d, %d].", prev_key.ToString(), ret.first, ret.second);
+                // LogInternalPage(next_pr_int_ptr);
                 prev_key = next_pr_int_ptr->KeyAt(0);
                 next_pr_int_ptr->MoveBackward(ret.first);
                 // not necessary.
                 // next_pr_int_ptr->MoveBackward(1);
                 next_pr_int_ptr->IncreaseSize(-1);
-                LOG_INFO(">>>>>>>>");
-                LOG_INFO("prev key: %ld", prev_key.ToString());
-                LogInternalPage(next_pr_int_ptr);
-                LOG_INFO("<<<<<<<<");
+                // LOG_INFO(">>>>>>>>");
+                // LOG_INFO("prev key: %ld", prev_key.ToString());
+                // LogInternalPage(next_pr_int_ptr);
+                // LOG_INFO("<<<<<<<<");
                 PopulateUpV2(next_pr_int_ptr, prev_key, next_pr_int_ptr->KeyAt(0));
               }
             } else {
@@ -1419,8 +1325,8 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
             }
             unpin_coll.erase(tmp_ptr->GetPageId());
 
-            LOG_INFO("page#%d is deleted.", tmp_ptr->GetPageId());
-            LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), tmp_ptr->GetPageId());
+            // LOG_INFO("page#%d is deleted.", tmp_ptr->GetPageId());
+            // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), tmp_ptr->GetPageId());
             tmp_ptr->WUnlatch();
             buffer_pool_manager_->DeletePage(tmp_ptr->GetPageId());
           }
@@ -1430,16 +1336,14 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
             if (i == 0) {
               UnlatchRootPage();
             }
-            LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
+            // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn->GetPageId());
             damn->WUnlatch();
           }
 
           if (st_1.empty()) {
             UnlatchRootPage();
           }
-          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), next_ptr->GetPageId());
-          // next_ptr->WUnlatch();
-          LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
+          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
           ptr->WUnlatch();
           UnpinPages(unpin_coll, signature);
 
@@ -1477,19 +1381,12 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
           if (i > check_point + 1) {
             st_0[i - 1].second = st_0[i - 1].first->GetSize() - 1;
           }
+
           page_id_t next_page_id = st_0[i - 1].first->ValueAt(st_0[i - 1].second);
-
-          if (auto it = cached_ptr.find(next_page_id); it != cached_ptr.end()) {
-            loop_back_ptr = it->second;
-          } else {
-            loop_back_ptr = buffer_pool_manager_->FetchPage(next_page_id);
-            cached_ptr.insert({next_page_id, loop_back_ptr});
-            unpin_coll.insert({next_page_id, loop_back_ptr});
-          }
-
+          loop_back_ptr = FastFetchWithWLatch(next_page_id, &cached_ptr, &unpin_coll);
           assert(loop_back_ptr != nullptr);
-          loop_back_ptr->WLatch();
-          LOG_INFO("[%s]: page#%d acquire a W-latch.", signature.c_str(), loop_back_ptr->GetPageId());
+
+          // LOG_INFO("[%s]: page#%d acquire a W-latch.", signature.c_str(), loop_back_ptr->GetPageId());
           st_0[i].first =
               reinterpret_cast<BPlusTreeInternalPage<KeyType, bustub::page_id_t, KeyComparator> *>(loop_back_ptr);
         }
@@ -1499,18 +1396,10 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
         Page *prev_ptr = nullptr;
         BPlusTreeLeafPage<KeyType, RID, KeyComparator> *prev_leaf_ptr = nullptr;
 
-        if (auto it = cached_ptr.find(prev_page_id); it != cached_ptr.end()) {
-          prev_ptr = it->second;
-        } else {
-          prev_ptr = buffer_pool_manager_->FetchPage(prev_page_id);
-          prev_ptr->WLatch();
-          LOG_INFO("[%s]: page#%d acquire a W-latch.", signature.c_str(), prev_ptr->GetPageId());
-          prev_leaf_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(prev_ptr);
-          cached_ptr.insert({prev_page_id, prev_ptr});
-          unpin_coll.insert({prev_page_id, prev_ptr});
-        }
-
+        prev_ptr = FastFetchWithWLatch(prev_page_id, &cached_ptr, &unpin_coll);
+        prev_leaf_ptr = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(prev_ptr);
         assert(prev_leaf_ptr != nullptr);
+
         if (prev_leaf_ptr->GetSize() > prev_leaf_ptr->GetMinSize()) {
           int last_idx = prev_leaf_ptr->GetSize() - 1;
           KeyType mov_key = prev_leaf_ptr->KeyAt(last_idx);
@@ -1531,10 +1420,10 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
             if (i == 0) {
               UnlatchRootPage();
             }
-            LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn0->GetPageId());
+            // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn0->GetPageId());
             damn0->WUnlatch();
             if (damn0 != damn1) {
-              LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn1->GetPageId());
+              // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn1->GetPageId());
               damn1->WUnlatch();
             }
           }
@@ -1542,16 +1431,16 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
           if (st_1.empty()) {
             UnlatchRootPage();
           }
-          LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), prev_ptr->GetPageId());
+          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), prev_ptr->GetPageId());
           prev_ptr->WUnlatch();
-          LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
+          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
           ptr->WUnlatch();
           UnpinPages(unpin_coll, signature);
 
           rem_cnt_.fetch_add(prime_quota);
           buffer_pool_page_quota_.notify_one();
 
-          LOG_INFO("find remove path 4-2.");
+          // LOG_INFO("find remove path 4-2.");
           return;
         }
 
@@ -1590,8 +1479,8 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
           }
           unpin_coll.erase(tmp_ptr->GetPageId());
 
-          LOG_INFO("page#%d is deleted.", tmp_ptr->GetPageId());
-          LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), tmp_ptr->GetPageId());
+          // LOG_INFO("page#%d is deleted.", tmp_ptr->GetPageId());
+          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), tmp_ptr->GetPageId());
           tmp_ptr->WUnlatch();
           buffer_pool_manager_->DeletePage(tmp_ptr->GetPageId());
         }
@@ -1602,10 +1491,10 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
           if (i == 0) {
             UnlatchRootPage();
           }
-          LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn0->GetPageId());
+          // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn0->GetPageId());
           damn0->WUnlatch();
           if (damn0 != damn1 && damn1 != nullptr) {
-            LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn1->GetPageId());
+            // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), damn1->GetPageId());
             damn1->WUnlatch();
           }
         }
@@ -1613,16 +1502,14 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
         if (st_1.empty()) {
           UnlatchRootPage();
         }
-        LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), prev_ptr->GetPageId());
+        // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), prev_ptr->GetPageId());
         prev_ptr->WUnlatch();
-        // LOG_INFO("[%s]: page#%d release a W-latch.", signature.c_str(), ptr->GetPageId());
-        // ptr->WUnlatch();
         UnpinPages(unpin_coll, signature);
 
         rem_cnt_.fetch_add(prime_quota);
         buffer_pool_page_quota_.notify_one();
 
-        LOG_INFO("find remove path 4-3.");
+        // LOG_INFO("find remove path 4-3.");
 
         return;
       }
@@ -1775,8 +1662,8 @@ void BPLUSTREE_TYPE::MergedToLeftSibling(BPlusTreePage *prev_page, BPlusTreePage
       while (p_page_ptr->GetPinCount() > 0) {
         buffer_pool_manager_->UnpinPage(ppid, false);
       }
-      LOG_INFO("page#%d is deleted.", ppid);
-      LOG_INFO("page#%d release a W-latch.", p_page_ptr->GetPageId());
+      // LOG_INFO("page#%d is deleted.", ppid);
+      // LOG_INFO("page#%d release a W-latch.", p_page_ptr->GetPageId());
       p_page_ptr->WUnlatch();
 
       buffer_pool_manager_->DeletePage(ppid);
@@ -1792,8 +1679,8 @@ void BPLUSTREE_TYPE::MergedToLeftSibling(BPlusTreePage *prev_page, BPlusTreePage
   }
 
   del_page_mux_.lock();
-  LOG_INFO("page#%d is deleted.", this_page->GetPageId());
-  LOG_INFO("page#%d release a W-latch.", this_page_ptr->GetPageId());
+  // LOG_INFO("page#%d is deleted.", this_page->GetPageId());
+  // LOG_INFO("page#%d release a W-latch.", this_page_ptr->GetPageId());
   this_page_ptr->WUnlatch();
   buffer_pool_manager_->DeletePage(this_page->GetPageId());
   del_page_mux_.unlock();
@@ -1845,8 +1732,8 @@ void BPLUSTREE_TYPE::MergedWithRightSibling(BPlusTreePage *this_page, BPlusTreeP
       while (p_page_ptr->GetPinCount() > 0) {
         buffer_pool_manager_->UnpinPage(ppid, false);
       }
-      LOG_INFO("page#%d is deleted.", ppid);
-      LOG_INFO("page#%d release a W-latch.", p_page_ptr->GetPageId());
+      // LOG_INFO("page#%d is deleted.", ppid);
+      // LOG_INFO("page#%d release a W-latch.", p_page_ptr->GetPageId());
       p_page_ptr->WUnlatch();
 
       buffer_pool_manager_->DeletePage(ppid);
@@ -1862,8 +1749,8 @@ void BPLUSTREE_TYPE::MergedWithRightSibling(BPlusTreePage *this_page, BPlusTreeP
   }
 
   del_page_mux_.lock();
-  LOG_INFO("page#%d is deleted.", next_page->GetPageId());
-  LOG_INFO("page#%d release a W-latch.", next_page_ptr->GetPageId());
+  // LOG_INFO("page#%d is deleted.", next_page->GetPageId());
+  // LOG_INFO("page#%d release a W-latch.", next_page_ptr->GetPageId());
   next_page_ptr->WUnlatch();
   buffer_pool_manager_->DeletePage(next_page->GetPageId());
   del_page_mux_.unlock();
@@ -1932,25 +1819,25 @@ auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
 
   ptr = buffer_pool_manager_->FetchPage(root_page_id_);
   ptr->RLatch();
-  LOG_INFO("[%s]: page#%d acquire a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(), ptr->GetPinCount());
+  // LOG_INFO("[%s]: page#%d acquire a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(), ptr->GetPinCount());
 
   auto tmp = reinterpret_cast<BPlusTreePage *>(ptr);
   while (!tmp->IsLeafPage()) {
     auto fuck = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(tmp);
     tmp = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager_->FetchPage(fuck->ValueAt(0)));
-    LOG_INFO("[%s]: page#%d acquire a R-latch. pin cnt: %d.", signature.c_str(), tmp->GetPageId(),
-             reinterpret_cast<Page *>(tmp)->GetPinCount());
+    // LOG_INFO("[%s]: page#%d acquire a R-latch. pin cnt: %d.", signature.c_str(), tmp->GetPageId(),
+    //          reinterpret_cast<Page *>(tmp)->GetPinCount());
     reinterpret_cast<Page *>(tmp)->RLatch();
-    LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), fuck->GetPageId(),
-             reinterpret_cast<Page *>(fuck)->GetPinCount());
+    // LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), fuck->GetPageId(),
+    //          reinterpret_cast<Page *>(fuck)->GetPinCount());
     reinterpret_cast<Page *>(fuck)->RUnlatch();
 
     buffer_pool_manager_->UnpinPage(fuck->GetPageId(), false);
   }
 
   auto fuck = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(tmp);
-  LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), tmp->GetPageId(),
-           reinterpret_cast<Page *>(tmp)->GetPinCount());
+  // LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), tmp->GetPageId(),
+  //          reinterpret_cast<Page *>(tmp)->GetPinCount());
   reinterpret_cast<Page *>(tmp)->RUnlatch();
   buffer_pool_manager_->UnpinPage(tmp->GetPageId(), false);
   // rem_cnt_.fetch_add(prime_quota);
@@ -1995,11 +1882,11 @@ auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
 
   auto fuck = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(tmp);
   int index = BinarySearch(key, fuck);
-  if (comparator_(key, fuck->KeyAt(index)) == 0) {
-    LOG_INFO("case 2 now first page. key: %ld. index: %d", key.ToString(), index);
-  } else {
-    LOG_INFO("WTF??? key: %ld", key.ToString());
-  }
+  // if (comparator_(key, fuck->KeyAt(index)) == 0) {
+  //   // LOG_INFO("case 2 now first page. key: %ld. index: %d", key.ToString(), index);
+  // } else {
+  //   // LOG_INFO("WTF??? key: %ld", key.ToString());
+  // }
 
   reinterpret_cast<Page *>(tmp)->RUnlatch();
   buffer_pool_manager_->UnpinPage(tmp->GetPageId(), false);
@@ -2015,7 +1902,7 @@ auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE {
-  LOG_INFO("WTF33333");
+  // LOG_INFO("WTF33333");
   return INDEXITERATOR_TYPE();
 }
 
@@ -2166,7 +2053,7 @@ void BPLUSTREE_TYPE::InsertInternalCanSplit(
 
     page_id_t neww_page;
     Page *neww_ptr = buffer_pool_manager_->NewPage(&neww_page);
-    LOG_INFO("new a page#%d ", neww_ptr->GetPageId());
+    // LOG_INFO("new a page#%d ", neww_ptr->GetPageId());
     cached_ptr->insert({neww_page, neww_ptr});
     unpin_coll->insert({neww_page, neww_ptr});
     // st[i] split into its new next: `neww_ptr`.
@@ -2270,7 +2157,7 @@ void BPLUSTREE_TYPE::InsertInternalCanSplit(
     tmp_value = neww_page_ptr->GetPageId();
     if (i == 0) {
       Page *new_root_ptr = buffer_pool_manager_->NewPage(&root_page_id_);
-      LOG_INFO("new a page#%d ", new_root_ptr->GetPageId());
+      // LOG_INFO("new a page#%d ", new_root_ptr->GetPageId());
       cached_ptr->insert({root_page_id_, new_root_ptr});
       unpin_coll->insert({root_page_id_, new_root_ptr});
       UpdateRootPageId();
@@ -2290,7 +2177,7 @@ void BPLUSTREE_TYPE::InsertInternalCanSplit(
       cur_height_.fetch_add(1);
 
       unpin_is_dirty->insert_or_assign(root_page_id_, true);
-      LogInternalPage(new_root_page_ptr);
+      // LogInternalPage(new_root_page_ptr);
     }
   }
 }
@@ -2539,7 +2426,24 @@ void BPLUSTREE_TYPE::TreeHeightTrim(std::set<Page *> *stale_root_coll) {
   }
 
   buffer_pool_manager_->UnpinPage(tmp_bp_root->GetPageId(), true);
-  LOG_INFO("stale root page cnt: %ld. cur root: %d", stale_root_coll->size(), root_page_id_);
+  // LOG_INFO("stale root page cnt: %ld. cur root: %d", stale_root_coll->size(), root_page_id_);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::FastFetchWithWLatch(page_id_t pid,
+                                         std::unordered_map<bustub::page_id_t, bustub::Page *> *cached_ptr,
+                                         std::unordered_map<bustub::page_id_t, bustub::Page *> *unpin_coll) -> Page * {
+  Page *ptr = nullptr;
+  if (auto it = cached_ptr->find(pid); it != cached_ptr->end()) {
+    ptr = it->second;
+  } else {
+    ptr = buffer_pool_manager_->FetchPage(pid);
+    cached_ptr->insert({pid, ptr});
+    unpin_coll->insert({pid, ptr});
+    ptr->WLatch();
+  }
+
+  return ptr;
 }
 
 // Generate n random strings
