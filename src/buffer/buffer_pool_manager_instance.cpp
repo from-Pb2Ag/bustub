@@ -93,6 +93,7 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
   latch_.lock();
   // page_id can present invalid page.
   if (page_id == INVALID_PAGE_ID) {
+    LOG_INFO("ret path 1");
     latch_.unlock();
     return nullptr;
   }
@@ -103,6 +104,7 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
     pages_[corresponding_f_id].pin_count_++;
     replacer_->SetEvictable(corresponding_f_id, false);
     replacer_->RecordAccess(corresponding_f_id);
+    LOG_INFO("ret path 2");
     latch_.unlock();
     return &pages_[corresponding_f_id];
     // other wise find a appropriate frame first.
@@ -120,7 +122,7 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
     // }
     if (replacer_->Evict(&corresponding_f_id)) {
       page_id_t stale_page_id = pages_[corresponding_f_id].GetPageId();
-      // LOG_INFO("$$$$1 get from evict: %d", stale_page_id);
+      LOG_INFO("$$$$1 get from evict: %d", stale_page_id);
       if (pages_[corresponding_f_id].IsDirty()) {
         FlushPgImpInner(stale_page_id);
       }
@@ -128,12 +130,13 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
     } else {
       // LOG_INFO("@@@@1 failed");
       // if now free_list and can evict nothing.
+      LOG_INFO("ret path 3");
       latch_.unlock();
       return nullptr;
       // return NULL;
     }
   }
-  // LOG_INFO("fetch an existing page with `FetchPgImp`. page id: %d. frame id %d", page_id, corresponding_f_id);
+  LOG_INFO("fetch an existing page with `FetchPgImp`. page id: %d. frame id %d", page_id, corresponding_f_id);
   // read the page from disk.
   pages_[corresponding_f_id].ResetMemory();
   pages_[corresponding_f_id].page_id_ = page_id;
@@ -146,6 +149,7 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
   replacer_->RecordAccess(corresponding_f_id);
   page_table_->Insert(page_id, corresponding_f_id);
 
+  LOG_INFO("ret path 4");
   latch_.unlock();
   return &pages_[corresponding_f_id];
   // return nullptr;

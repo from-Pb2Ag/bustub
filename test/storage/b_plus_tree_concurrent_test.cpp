@@ -45,6 +45,7 @@ void InsertHelper(BPlusTree<GenericKey<8>, RID, GenericComparator<8>> *tree, con
   // create transaction
   auto *transaction = new Transaction(0);
   for (auto key : keys) {
+    // LOG_INFO("thread#%ld insert key: %ld.", thread_itr, key);
     int64_t value = key & 0xFFFFFFFF;
     rid.Set(static_cast<int32_t>(key >> 32), value);
     index_key.SetFromInteger(key);
@@ -336,7 +337,174 @@ TEST(BPlusTreeConcurrentTest, DISABLED_DeleteThenTravelTest1) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, RandomDeleteTest) {
+TEST(BPlusTreeConcurrentTest, DISABLED_RandomDeleteTest) {
+  // create KeyComparator and index schema
+  auto key_schema = ParseCreateStatement("a bigint");
+  GenericComparator<8> comparator(key_schema.get());
+
+  auto *disk_manager = new DiskManager("test.db");
+  BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
+  // create b+ tree
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 2, 3);
+  // GenericKey<8> index_key;
+  // create and fetch header_page
+  page_id_t page_id;
+  auto header_page = bpm->NewPage(&page_id);
+  (void)header_page;
+
+  int64_t scale_factor = 128;
+  std::random_device rd;
+  std::mt19937 gen1(rd());
+  // std::mt19937 gen2(rd());
+
+  // sequential insert
+  std::vector<int64_t> keys;
+  for (int64_t i = 1; i < scale_factor; i++) {
+    keys.push_back(i);
+  }
+  std::shuffle(keys.begin(), keys.end(), gen1);
+
+  int64_t rem_end_offset = scale_factor >> 2;
+  std::vector<int64_t> remove_keys = std::vector<int64_t>(keys.begin(), keys.begin() + rem_end_offset);
+
+  // keys = {12, 16, 4, 1, 28, 9, 23, 13, 11, 20, 7, 21, 27, 5};
+  // keys = {12, 16, 4, 1, 28, 9, 23, 13, 11};
+  // keys = {12, 16, 4, 1};
+  std::string filename = "RandomDeleteTestData.out";
+  std::ofstream file(filename, std::ios::trunc);
+  if (!file.is_open()) {
+    std::cerr << "Failed to open file: " << filename << std::endl;
+    return;
+  }
+  /*
+    toggle the following write patterns (bin vs text).
+  */
+  // file.write(reinterpret_cast<const char *>(keys.data()), keys.size() * sizeof(int64_t));
+
+  file << "{";
+  for (size_t i = 0; i < keys.size(); ++i) {
+    file << keys[i];
+    if (i != keys.size() - 1) {
+      file << ", ";
+    }
+  }
+  file << "};\n";
+
+  file << "{";
+  for (size_t i = 0; i < remove_keys.size(); ++i) {
+    file << remove_keys[i];
+    if (i != remove_keys.size() - 1) {
+      file << ", ";
+    }
+  }
+  file << "};\n";
+
+  file.close();
+
+  // InsertHelper(&tree, keys);
+  LaunchParallelTest(1, InsertHelper, &tree, keys);
+
+  tree.PrintGraphUtil();
+
+  std::vector<int64_t> remain_keys = std::vector<int64_t>(keys.begin() + rem_end_offset, keys.end());
+  std::sort(remain_keys.begin(), remain_keys.end());
+
+  LOG_INFO("insert phase end");
+  LaunchParallelTest(4, DeleteHelper, &tree, remove_keys);
+
+  // tree.PrintGraphUtil();
+
+  // LOG_INFO("remove phase end");
+  // int64_t start_key = remain_keys[0];
+  // int64_t current_key = start_key;
+  // int64_t size = 0;
+  // index_key.SetFromInteger(start_key);
+
+  // for (auto iterator = tree.Begin(index_key); iterator != tree.End(); ++iterator) {
+  //   LOG_INFO("FUCKKKKK");
+  //   current_key = remain_keys.at(size);
+  //   auto location = (*iterator).second;
+  //   EXPECT_EQ(location.GetPageId(), 0);
+  //   EXPECT_EQ(location.GetSlotNum(), current_key);
+  //   LOG_INFO("fuck val: %d", location.GetSlotNum());
+  //   size = size + 1;
+  // }
+
+  // EXPECT_EQ(size, remain_keys.size());
+
+  bpm->UnpinPage(HEADER_PAGE_ID, true);
+  delete disk_manager;
+  delete bpm;
+  remove("test.db");
+  remove("test.log");
+}
+
+TEST(BPlusTreeConcurrentTest, ScaleTest) {
+  // create KeyComparator and index schema
+  auto key_schema = ParseCreateStatement("a bigint");
+  GenericComparator<8> comparator(key_schema.get());
+
+  auto *disk_manager = new DiskManager("test.db");
+  BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
+  // create b+ tree
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 3, 5);
+  // GenericKey<8> index_key;
+  // create and fetch header_page
+  page_id_t page_id;
+  auto header_page = bpm->NewPage(&page_id);
+  (void)header_page;
+
+  int64_t scale_factor = 128;
+  std::random_device rd;
+  std::mt19937 gen1(rd());
+  // std::mt19937 gen2(rd());
+
+  // sequential insert
+  std::vector<int64_t> keys;
+  for (int64_t i = 1; i < scale_factor; i++) {
+    keys.push_back(i);
+  }
+  // std::shuffle(keys.begin(), keys.end(), gen1);
+
+  LaunchParallelTest(1, InsertHelper, &tree, keys);
+
+  // tree.PrintGraphUtil();
+
+  std::vector<int64_t> remove_keys = keys;
+  // std::shuffle(remove_keys.begin(), remove_keys.end(), gen1);
+  remove_keys.resize(scale_factor - (scale_factor >> 4));
+
+  LOG_INFO("insert phase end");
+  LaunchParallelTest(1, DeleteHelper, &tree, remove_keys);
+
+  // tree.PrintGraphUtil();
+
+  LOG_INFO("remove phase end");
+  // int64_t start_key = remain_keys[0];
+  // int64_t current_key = start_key;
+  // int64_t size = 0;
+  // index_key.SetFromInteger(start_key);
+
+  // for (auto iterator = tree.Begin(index_key); iterator != tree.End(); ++iterator) {
+  //   LOG_INFO("FUCKKKKK");
+  //   current_key = remain_keys.at(size);
+  //   auto location = (*iterator).second;
+  //   EXPECT_EQ(location.GetPageId(), 0);
+  //   EXPECT_EQ(location.GetSlotNum(), current_key);
+  //   LOG_INFO("fuck val: %d", location.GetSlotNum());
+  //   size = size + 1;
+  // }
+
+  // EXPECT_EQ(size, remain_keys.size());
+
+  bpm->UnpinPage(HEADER_PAGE_ID, true);
+  delete disk_manager;
+  delete bpm;
+  remove("test.db");
+  remove("test.log");
+}
+
+TEST(BPlusTreeConcurrentTest, DISABLED_SingleThreadInsertRandomDeleteTest) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -351,7 +519,7 @@ TEST(BPlusTreeConcurrentTest, RandomDeleteTest) {
   auto header_page = bpm->NewPage(&page_id);
   (void)header_page;
 
-  int64_t scale_factor = 512;
+  int64_t scale_factor = 128;
   std::random_device rd;
   std::mt19937 gen1(rd());
   // std::mt19937 gen2(rd());
@@ -362,10 +530,15 @@ TEST(BPlusTreeConcurrentTest, RandomDeleteTest) {
     keys.push_back(i);
   }
   std::shuffle(keys.begin(), keys.end(), gen1);
+
+  int64_t rem_end_offset = scale_factor >> 2;
+  std::vector<int64_t> remove_keys = std::vector<int64_t>(keys.begin(), keys.begin() + rem_end_offset);
+  std::vector<int64_t> remain_keys = std::vector<int64_t>(keys.begin() + rem_end_offset, keys.end());
+  std::sort(remain_keys.begin(), remain_keys.end());
   // keys = {12, 16, 4, 1, 28, 9, 23, 13, 11, 20, 7, 21, 27, 5};
   // keys = {12, 16, 4, 1, 28, 9, 23, 13, 11};
   // keys = {12, 16, 4, 1};
-  std::string filename = "RandomDeleteTestData.out";
+  std::string filename = "SingleThreadInsertRandomDelete.out";
   std::ofstream file(filename, std::ios::trunc);
   if (!file.is_open()) {
     std::cerr << "Failed to open file: " << filename << std::endl;
@@ -383,22 +556,27 @@ TEST(BPlusTreeConcurrentTest, RandomDeleteTest) {
       file << ", ";
     }
   }
-  file << "]";
+  file << "]\n";
+
+  file << "[";
+  for (size_t i = 0; i < remove_keys.size(); ++i) {
+    file << remove_keys[i];
+    if (i != remove_keys.size() - 1) {
+      file << ", ";
+    }
+  }
+  file << "]\n";
 
   file.close();
 
   // InsertHelper(&tree, keys);
-  LaunchParallelTest(8, InsertHelper, &tree, keys);
+  // insert single thread.
+  LaunchParallelTest(1, InsertHelper, &tree, keys);
 
   tree.PrintGraphUtil();
 
-  int64_t rem_end_offset = scale_factor >> 2;
-  std::vector<int64_t> remove_keys = std::vector<int64_t>(keys.begin(), keys.begin() + rem_end_offset);
-  std::vector<int64_t> remain_keys = std::vector<int64_t>(keys.begin() + rem_end_offset, keys.end());
-  std::sort(remain_keys.begin(), remain_keys.end());
-
   LOG_INFO("insert phase end");
-  LaunchParallelTest(1, DeleteHelper, &tree, remove_keys);
+  LaunchParallelTest(4, DeleteHelper, &tree, remove_keys);
 
   tree.PrintGraphUtil();
 
@@ -730,6 +908,200 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy6DeleteTest) {
   std::sort(remain_keys.begin(), remain_keys.end());
 
   LaunchParallelTest(1, DeleteHelper, &tree, remove_keys);
+
+  int64_t start_key = remain_keys[0];
+  int64_t current_key = start_key;
+  int64_t size = 0;
+  index_key.SetFromInteger(start_key);
+
+  for (auto iterator = tree.Begin(index_key); iterator != tree.End(); ++iterator) {
+    current_key = remain_keys.at(size);
+    auto location = (*iterator).second;
+    EXPECT_EQ(location.GetPageId(), 0);
+    EXPECT_EQ(location.GetSlotNum(), current_key);
+    LOG_INFO("fuck val: %d", location.GetSlotNum());
+    size = size + 1;
+  }
+
+  EXPECT_EQ(size, remain_keys.size());
+
+  bpm->UnpinPage(HEADER_PAGE_ID, true);
+  delete disk_manager;
+  delete bpm;
+  remove("test.db");
+  remove("test.log");
+}
+
+TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy7DeleteTest) {
+  // create KeyComparator and index schema
+  auto key_schema = ParseCreateStatement("a bigint");
+  GenericComparator<8> comparator(key_schema.get());
+
+  auto *disk_manager = new DiskManager("test.db");
+  BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
+  // create b+ tree
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 2, 3);
+  GenericKey<8> index_key;
+  // create and fetch header_page
+  page_id_t page_id;
+  auto header_page = bpm->NewPage(&page_id);
+  (void)header_page;
+
+  // sequential insert
+  // awk '{gsub(/\./, "", $4); print $4}' bbbb.log | tr '\n' ',' | sed 's/^/{/; s/,$/};/'
+  std::vector<int64_t> keys = {
+      21, 116, 105, 23,  34,  86, 7,   53,  64,  44, 5,  72,  10,  112, 32,  109, 85,  118, 106, 11, 55,  73,
+      78, 61,  13,  115, 8,   50, 17,  14,  12,  19, 79, 127, 26,  84,  117, 6,   40,  47,  110, 93, 62,  31,
+      33, 57,  58,  108, 125, 94, 25,  28,  70,  15, 16, 82,  27,  36,  90,  35,  111, 59,  63,  48, 69,  101,
+      18, 113, 56,  30,  89,  37, 123, 124, 60,  74, 39, 41,  126, 75,  95,  77,  120, 83,  102, 80, 66,  54,
+      3,  46,  51,  76,  122, 99, 100, 22,  114, 45, 81, 107, 1,   29,  42,  24,  20,  88,  38,  87, 103, 9,
+      92, 68,  91,  67,  49,  52, 2,   43,  96,  71, 97, 119, 4,   121, 98,  104, 65};
+
+  InsertHelper(&tree, keys);
+
+  std::vector<int64_t> remove_keys = {21, 116, 105, 23, 34, 86, 7,  53, 64, 44,  5, 72, 10, 112, 32, 109,
+                                      85, 118, 106, 11, 55, 73, 78, 61, 13, 115, 8, 50, 17, 14,  12, 19};
+  std::set<int64_t> remain_keys_set(keys.begin(), keys.end());
+  for (const auto &val : remove_keys) {
+    remain_keys_set.erase(val);
+  }
+  std::vector<int64_t> remain_keys = std::vector<int64_t>(remain_keys_set.begin(), remain_keys_set.end());
+  std::sort(remain_keys.begin(), remain_keys.end());
+
+  LaunchParallelTest(2, DeleteHelper, &tree, remove_keys);
+
+  int64_t start_key = remain_keys[0];
+  int64_t current_key = start_key;
+  int64_t size = 0;
+  index_key.SetFromInteger(start_key);
+
+  for (auto iterator = tree.Begin(index_key); iterator != tree.End(); ++iterator) {
+    current_key = remain_keys.at(size);
+    auto location = (*iterator).second;
+    EXPECT_EQ(location.GetPageId(), 0);
+    EXPECT_EQ(location.GetSlotNum(), current_key);
+    LOG_INFO("fuck val: %d", location.GetSlotNum());
+    size = size + 1;
+  }
+
+  EXPECT_EQ(size, remain_keys.size());
+
+  bpm->UnpinPage(HEADER_PAGE_ID, true);
+  delete disk_manager;
+  delete bpm;
+  remove("test.db");
+  remove("test.log");
+}
+
+TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy8DeleteTest) {
+  // create KeyComparator and index schema
+  auto key_schema = ParseCreateStatement("a bigint");
+  GenericComparator<8> comparator(key_schema.get());
+
+  auto *disk_manager = new DiskManager("test.db");
+  BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
+  // create b+ tree
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 2, 3);
+  GenericKey<8> index_key;
+  // create and fetch header_page
+  page_id_t page_id;
+  auto header_page = bpm->NewPage(&page_id);
+  (void)header_page;
+
+  // sequential insert
+  // awk '{gsub(/\./, "", $4); print $4}' bbbb.log | tr '\n' ',' | sed 's/^/{/; s/,$/};/'
+  // std::vector<int64_t> keys = {
+  //     26,  52,  110, 113, 65,  108, 103, 46,  70, 23, 68,  29,  10, 84,  54,  51,  94,  13,  25,  42,  28,  9,
+  //     66,  76,  24,  96,  27,  16,  127, 104, 72, 37, 112, 53,  17, 2,   125, 39,  21,  5,   57,  116, 122, 73,
+  //     60,  75,  95,  1,   90,  8,   81,  120, 15, 91, 119, 47,  88, 74,  111, 105, 12,  86,  36,  22,  118, 35,
+  //     58,  30,  79,  63,  98,  38,  102, 55,  85, 50, 97,  114, 99, 32,  69,  3,   92,  67,  56,  87,  123, 19,
+  //     61,  107, 31,  7,   109, 83,  34,  62,  48, 6,  41,  89,  40, 106, 93,  43,  126, 100, 124, 77,  78,  45,
+  //     115, 18,  44,  49,  117, 101, 14,  11,  80, 33, 121, 71,  20, 4,   82,  64,  59};
+  std::vector<int64_t> keys = {121, 51, 127, 111, 16, 123, 2,  10,  65,  126, 122, 28,  120, 114, 53,  1,  77, 41, 7,
+                               13,  73, 66,  124, 63, 108, 22, 19,  112, 125, 21,  86,  48,  38,  54,  90, 71, 85, 99,
+                               33,  46, 4,   35,  56, 31,  81, 107, 104, 12,  24,  60,  70,  110, 115, 37, 75, 44, 27,
+                               11,  6,  55,  18,  58, 84,  88, 102, 69,  98,  61,  67,  8,   78,  103, 34, 32, 47, 80,
+                               87,  64, 97,  30,  52, 82,  68, 23,  100, 105, 96,  92,  9,   79,  109, 91, 17, 57, 49,
+                               14,  25, 36,  74,  39, 83,  42, 5,   26,  113, 95,  43,  116, 62,  20,  45, 29, 94, 3,
+                               106, 76, 93,  89,  40, 15,  50, 59,  119, 101, 72,  117, 118};
+  // InsertHelper(&tree, keys);
+  LaunchParallelTest(1, InsertHelper, &tree, keys);
+
+  // std::vector<int64_t> remove_keys = {26, 52, 110, 113, 65, 108, 103, 46, 70, 23, 68, 29, 10,  84,  54, 51,
+  //                                     94, 13, 25,  42,  28, 9,   66,  76, 24, 96, 27, 16, 127, 104, 72, 37};
+  std::vector<int64_t> remove_keys = {121, 51, 127, 111, 16, 123, 2,   10, 65,  126, 122, 28,  120, 114, 53, 1,
+                                      77,  41, 7,   13,  73, 66,  124, 63, 108, 22,  19,  112, 125, 21,  86, 48};
+  std::set<int64_t> remain_keys_set(keys.begin(), keys.end());
+  for (const auto &val : remove_keys) {
+    remain_keys_set.erase(val);
+  }
+  std::vector<int64_t> remain_keys = std::vector<int64_t>(remain_keys_set.begin(), remain_keys_set.end());
+  std::sort(remain_keys.begin(), remain_keys.end());
+
+  LaunchParallelTest(2, DeleteHelper, &tree, remove_keys);
+
+  int64_t start_key = remain_keys[0];
+  int64_t current_key = start_key;
+  int64_t size = 0;
+  index_key.SetFromInteger(start_key);
+
+  for (auto iterator = tree.Begin(index_key); iterator != tree.End(); ++iterator) {
+    current_key = remain_keys.at(size);
+    auto location = (*iterator).second;
+    EXPECT_EQ(location.GetPageId(), 0);
+    EXPECT_EQ(location.GetSlotNum(), current_key);
+    LOG_INFO("fuck val: %d", location.GetSlotNum());
+    size = size + 1;
+  }
+
+  EXPECT_EQ(size, remain_keys.size());
+
+  bpm->UnpinPage(HEADER_PAGE_ID, true);
+  delete disk_manager;
+  delete bpm;
+  remove("test.db");
+  remove("test.log");
+}
+
+TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy9DeleteTest) {
+  // create KeyComparator and index schema
+  auto key_schema = ParseCreateStatement("a bigint");
+  GenericComparator<8> comparator(key_schema.get());
+
+  auto *disk_manager = new DiskManager("test.db");
+  BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
+  // create b+ tree
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 2, 3);
+  GenericKey<8> index_key;
+  // create and fetch header_page
+  page_id_t page_id;
+  auto header_page = bpm->NewPage(&page_id);
+  (void)header_page;
+
+  // sequential insert
+  // awk '{gsub(/\./, "", $4); print $4}' bbbb.log | tr '\n' ',' | sed 's/^/{/; s/,$/};/'
+  std::vector<int64_t> keys = {
+      104, 51, 114, 54, 110, 45,  33,  127, 95, 5,  78,  20,  24,  89,  40, 27,  99,  2,   111, 10, 47,  108,
+      115, 56, 118, 25, 91,  66,  35,  39,  8,  41, 42,  29,  13,  3,   82, 16,  86,  36,  48,  44, 37,  83,
+      73,  43, 59,  72, 116, 90,  12,  49,  14, 26, 122, 80,  126, 109, 57, 9,   19,  38,  62,  18, 65,  68,
+      7,   96, 61,  74, 46,  106, 124, 103, 77, 32, 31,  112, 52,  63,  53, 123, 101, 121, 1,   69, 100, 102,
+      70,  34, 64,  4,  50,  28,  117, 6,   17, 67, 113, 93,  71,  30,  85, 76,  105, 120, 98,  23, 81,  107,
+      58,  75, 125, 55, 11,  60,  21,  15,  84, 92, 79,  119, 22,  87,  97, 88,  94};
+
+  // InsertHelper(&tree, keys);
+  LaunchParallelTest(1, InsertHelper, &tree, keys);
+
+  std::vector<int64_t> remove_keys = {104, 51, 114, 54, 110, 45,  33,  127, 95,  5,  78, 20, 24, 89, 40, 27,
+                                      99,  2,  111, 10, 47,  108, 115, 56,  118, 25, 91, 66, 35, 39, 8,  41};
+
+  std::set<int64_t> remain_keys_set(keys.begin(), keys.end());
+  for (const auto &val : remove_keys) {
+    remain_keys_set.erase(val);
+  }
+  std::vector<int64_t> remain_keys = std::vector<int64_t>(remain_keys_set.begin(), remain_keys_set.end());
+  std::sort(remain_keys.begin(), remain_keys.end());
+
+  LaunchParallelTest(8, DeleteHelper, &tree, remove_keys);
 
   int64_t start_key = remain_keys[0];
   int64_t current_key = start_key;

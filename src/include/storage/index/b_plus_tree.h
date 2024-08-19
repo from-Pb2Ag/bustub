@@ -160,7 +160,8 @@ class BPlusTree {
     as well as `unpin_coll` which is responsible for un-pin pages in the end of the outer function call.
     And W-latch it as soon as we can.
   */
-  auto FastFetchWithWLatch(page_id_t pid, std::unordered_map<bustub::page_id_t, bustub::Page *> *cached_ptr,
+  auto FastFetchWithWLatch(page_id_t pid, const std::string &signature,
+                           std::unordered_map<bustub::page_id_t, bustub::Page *> *cached_ptr,
                            std::unordered_map<bustub::page_id_t, bustub::Page *> *unpin_coll) -> Page *;
 
   /*
@@ -187,6 +188,7 @@ class BPlusTree {
   // current B+ tree height.
   std::atomic<size_t> cur_height_;
   std::condition_variable buffer_pool_page_quota_;
+  std::mutex quota_mux_;
   /*
     guard the page delete option. when should we del a page? 1: merged due to `remove` op; 2: stale root page.
     Since `delete` a page, first we need to `un-pin` and `un-latch` it.
