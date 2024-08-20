@@ -454,7 +454,7 @@ TEST(BPlusTreeConcurrentTest, ScaleTest) {
   auto header_page = bpm->NewPage(&page_id);
   (void)header_page;
 
-  int64_t scale_factor = 128;
+  int64_t scale_factor = 1000;
   std::random_device rd;
   std::mt19937 gen1(rd());
   // std::mt19937 gen2(rd());
@@ -471,8 +471,8 @@ TEST(BPlusTreeConcurrentTest, ScaleTest) {
   // tree.PrintGraphUtil();
 
   std::vector<int64_t> remove_keys = keys;
-  // std::shuffle(remove_keys.begin(), remove_keys.end(), gen1);
-  remove_keys.resize(scale_factor - (scale_factor >> 4));
+  std::shuffle(remove_keys.begin(), remove_keys.end(), gen1);
+  remove_keys.resize(scale_factor - (scale_factor >> 8));
 
   LOG_INFO("insert phase end");
   LaunchParallelTest(1, DeleteHelper, &tree, remove_keys);

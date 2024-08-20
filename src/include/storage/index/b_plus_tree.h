@@ -114,7 +114,7 @@ class BPlusTree {
       const std::vector<std::pair<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *, int>> &st);
 
   /*
-    call by a function, un-pin the pages in a thread scope.
+    call by remove/insert, un-pin the pages in a thread scope.
   */
   void UnpinPages(const std::unordered_map<page_id_t, Page *> &unpin_coll, const std::string &sig);
 
@@ -128,7 +128,8 @@ class BPlusTree {
       const KeyType &new_key,
       std::vector<std::pair<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *, int>> *st_1);
 
-  void MergedToLeftSibling(BPlusTreePage *prev_page, BPlusTreePage *this_page);
+  void MergedToLeftSibling(BPlusTreePage *prev_page, BPlusTreePage *this_page,
+                           std::unordered_map<bustub::page_id_t, bustub::Page *> *unpin_coll);
 
   void BorrowFromLeftSibling(BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *prev_page,
                              BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *this_page);
@@ -138,7 +139,8 @@ class BPlusTree {
 
   void PopulateUpV2(BPlusTreePage *this_page, const KeyType &old_first_key, const KeyType &new_first_key);
 
-  void MergedWithRightSibling(BPlusTreePage *this_page, BPlusTreePage *next_page);
+  void MergedWithRightSibling(BPlusTreePage *this_page, BPlusTreePage *next_page,
+                              std::unordered_map<bustub::page_id_t, bustub::Page *> *unpin_coll);
 
   /*
     -----------------------------------------
@@ -169,6 +171,8 @@ class BPlusTree {
     then the root page is stale. we save these root(s) in `stale_root_coll`.
   */
   void TreeHeightTrim(std::set<Page *> *stale_root_coll);
+  void DeleteStaleRoots(std::set<Page *> *stale_root_coll,
+                        std::unordered_map<bustub::page_id_t, bustub::Page *> *unpin_coll);
 
   // member variable
   std::string index_name_;

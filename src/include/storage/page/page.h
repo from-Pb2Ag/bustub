@@ -16,6 +16,7 @@
 #include <iostream>
 
 #include "common/config.h"
+#include "common/logger.h"
 #include "common/rwlatch.h"
 
 namespace bustub {
@@ -52,7 +53,11 @@ class Page {
   inline void WLatch() { rwlatch_.WLock(); }
 
   /** Release the page write latch. */
-  inline void WUnlatch() { rwlatch_.WUnlock(); }
+  inline void WUnlatch() {
+    // LOG_INFO("page#%d release a W-latch (attempt)", page_id_);
+    rwlatch_.WUnlock();
+    // LOG_INFO("page#%d release a W-latch (success)", page_id_);
+  }
 
   /** Acquire the page read latch. */
   inline void RLatch() { rwlatch_.RLock(); }
