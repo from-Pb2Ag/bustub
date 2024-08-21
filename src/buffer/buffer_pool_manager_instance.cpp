@@ -48,7 +48,7 @@ auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
   frame_id_t new_frame_id = -1;
   // frame id. find from the free list first.
   if (!free_list_.empty()) {
-    LOG_INFO("####0 get from free list. cur free list size: %ld.", free_list_.size());
+    // LOG_INFO("####0 get from free list. cur free list size: %ld.", free_list_.size());
     new_frame_id = free_list_.back();
     free_list_.pop_back();
   } else {
@@ -59,13 +59,13 @@ auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
     // }
     if (replacer_->Evict(&new_frame_id)) {
       page_id_t stale_page_id = pages_[new_frame_id].GetPageId();
-      LOG_INFO("$$$$0 get from evict frame#%d page#%d", new_frame_id, stale_page_id);
+      // LOG_INFO("$$$$0 get from evict frame#%d page#%d", new_frame_id, stale_page_id);
       if (pages_[new_frame_id].IsDirty()) {
         FlushPgImpInner(stale_page_id);
       }
       page_table_->Remove(stale_page_id);
     } else {
-      LOG_INFO("@@@@0 failed");
+      // LOG_INFO("@@@@0 failed");
       // if now free_list and can evict nothing.
       return nullptr;
     }
@@ -75,7 +75,7 @@ auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
   */
   *page_id = AllocatePage();
 
-  LOG_INFO("new a page with `NewPgImp`. new page#%d. frame#%d", *page_id, new_frame_id);
+  // LOG_INFO("new a page with `NewPgImp`. new page#%d. frame#%d", *page_id, new_frame_id);
   pages_[new_frame_id].ResetMemory();
   pages_[new_frame_id].page_id_ = *page_id;
   pages_[new_frame_id].pin_count_ = 1;
@@ -103,15 +103,15 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
     pages_[corresponding_f_id].pin_count_++;
     replacer_->SetEvictable(corresponding_f_id, false);
     replacer_->RecordAccess(corresponding_f_id);
-    LOG_INFO("####0 get from page table. page#%d, frame#%d, pin cnt: %d.", page_id, corresponding_f_id,
-             pages_[corresponding_f_id].pin_count_);
+    // LOG_INFO("####0 get from page table. page#%d, frame#%d, pin cnt: %d.", page_id, corresponding_f_id,
+    //          pages_[corresponding_f_id].pin_count_);
     latch_.unlock();
     return &pages_[corresponding_f_id];
     // other wise find a appropriate frame first.
   }
 
   if (!free_list_.empty()) {
-    LOG_INFO("####1 get from free list. cur free list size: %ld.", free_list_.size());
+    // LOG_INFO("####1 get from free list. cur free list size: %ld.", free_list_.size());
     corresponding_f_id = free_list_.back();
     free_list_.pop_back();
   } else {
@@ -122,20 +122,20 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
     // }
     if (replacer_->Evict(&corresponding_f_id)) {
       page_id_t stale_page_id = pages_[corresponding_f_id].GetPageId();
-      LOG_INFO("$$$$1 fetch page#%d. get from evict frame#%d page#%d", page_id, corresponding_f_id, stale_page_id);
+      // LOG_INFO("$$$$1 fetch page#%d. get from evict frame#%d page#%d", page_id, corresponding_f_id, stale_page_id);
       if (pages_[corresponding_f_id].IsDirty()) {
         FlushPgImpInner(stale_page_id);
       }
       page_table_->Remove(stale_page_id);
     } else {
-      LOG_INFO("@@@@1 failed");
+      // LOG_INFO("@@@@1 failed");
       // if now free_list and can evict nothing.
       latch_.unlock();
       return nullptr;
       // return NULL;
     }
   }
-  LOG_INFO("fetch an existing page with `FetchPgImp`. page#%d. frame#%d", page_id, corresponding_f_id);
+  // LOG_INFO("fetch an existing page with `FetchPgImp`. page#%d. frame#%d", page_id, corresponding_f_id);
   // read the page from disk.
   pages_[corresponding_f_id].ResetMemory();
   pages_[corresponding_f_id].page_id_ = page_id;
@@ -245,7 +245,7 @@ auto BufferPoolManagerInstance::DeletePgImp(page_id_t page_id) -> bool {
     reset the page's memory and metadata.
     DeallocatePage() freeing the page on the disk.
   */
-  LOG_INFO("attempts delete page#%d, frame#%d", page_id, corresponding_f_id);
+  // LOG_INFO("attempts delete page#%d, frame#%d", page_id, corresponding_f_id);
   free_list_.push_back(corresponding_f_id);
   page_table_->Remove(page_id);
   replacer_->Remove(corresponding_f_id);

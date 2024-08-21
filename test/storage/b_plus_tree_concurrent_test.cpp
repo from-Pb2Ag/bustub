@@ -37,6 +37,28 @@ void LaunchParallelTest(uint64_t num_threads, Args &&...args) {
   }
 }
 
+template <typename InsertFunc, typename DeleteFunc, typename... Args>
+void LaunchParallelInsertDeleteTest(uint64_t num_insert_threads, uint64_t num_delete_threads, InsertFunc &&insert_func,
+                                    DeleteFunc &&delete_func, BPlusTree<GenericKey<8>, RID, GenericComparator<8>> *tree,
+                                    const std::vector<int64_t> &insert_keys, const std::vector<int64_t> &delete_keys) {
+  std::vector<std::thread> thread_group;
+
+  // Launch a group of insert threads
+  for (uint64_t thread_itr = 0; thread_itr < num_insert_threads; ++thread_itr) {
+    thread_group.emplace_back(insert_func, tree, insert_keys, thread_itr);
+  }
+
+  // Launch a group of delete threads
+  for (uint64_t thread_itr = 0; thread_itr < num_delete_threads; ++thread_itr) {
+    thread_group.emplace_back(delete_func, tree, delete_keys, thread_itr);
+  }
+
+  // Join all threads with the main thread
+  for (auto &thread : thread_group) {
+    thread.join();
+  }
+}
+
 // helper function to insert
 void InsertHelper(BPlusTree<GenericKey<8>, RID, GenericComparator<8>> *tree, const std::vector<int64_t> &keys,
                   __attribute__((unused)) uint64_t thread_itr = 0) {
@@ -101,7 +123,7 @@ void DeleteHelperSplit(BPlusTree<GenericKey<8>, RID, GenericComparator<8>> *tree
   delete transaction;
 }
 
-TEST(BPlusTreeConcurrentTest, DISABLED_InsertPressureTest) {
+TEST(BPlusTreeConcurrentTest, InsertPressureTest) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -174,7 +196,7 @@ TEST(BPlusTreeConcurrentTest, DISABLED_InsertPressureTest) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, DISABLED_InsertTest1) {
+TEST(BPlusTreeConcurrentTest, InsertTest1) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -226,7 +248,7 @@ TEST(BPlusTreeConcurrentTest, DISABLED_InsertTest1) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, DISABLED_InsertTest2) {
+TEST(BPlusTreeConcurrentTest, InsertTest2) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -277,7 +299,7 @@ TEST(BPlusTreeConcurrentTest, DISABLED_InsertTest2) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, DISABLED_DeleteThenTravelTest1) {
+TEST(BPlusTreeConcurrentTest, DeleteThenTravelTest1) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -337,7 +359,7 @@ TEST(BPlusTreeConcurrentTest, DISABLED_DeleteThenTravelTest1) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, DISABLED_RandomDeleteTest) {
+TEST(BPlusTreeConcurrentTest, RandomDeleteTest) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -454,7 +476,7 @@ TEST(BPlusTreeConcurrentTest, ScaleTest) {
   auto header_page = bpm->NewPage(&page_id);
   (void)header_page;
 
-  int64_t scale_factor = 1000;
+  int64_t scale_factor = 10000;
   std::random_device rd;
   std::mt19937 gen1(rd());
   // std::mt19937 gen2(rd());
@@ -466,13 +488,13 @@ TEST(BPlusTreeConcurrentTest, ScaleTest) {
   }
   // std::shuffle(keys.begin(), keys.end(), gen1);
 
-  LaunchParallelTest(1, InsertHelper, &tree, keys);
+  LaunchParallelTest(4, InsertHelper, &tree, keys);
 
   // tree.PrintGraphUtil();
 
   std::vector<int64_t> remove_keys = keys;
-  std::shuffle(remove_keys.begin(), remove_keys.end(), gen1);
-  remove_keys.resize(scale_factor - (scale_factor >> 8));
+  // std::shuffle(remove_keys.begin(), remove_keys.end(), gen1);
+  remove_keys.resize(scale_factor - (scale_factor >> 11));
 
   LOG_INFO("insert phase end");
   LaunchParallelTest(1, DeleteHelper, &tree, remove_keys);
@@ -504,7 +526,62 @@ TEST(BPlusTreeConcurrentTest, ScaleTest) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, DISABLED_SingleThreadInsertRandomDeleteTest) {
+TEST(BPlusTreeConcurrentTest, ConcurrentMixedTest) {
+  // create KeyComparator and index schema
+  auto key_schema = ParseCreateStatement("a bigint");
+  GenericComparator<8> comparator(key_schema.get());
+
+  auto *disk_manager = new DiskManager("test.db");
+  BufferPoolManager *bpm = new BufferPoolManagerInstance(50, disk_manager);
+  // create b+ tree
+  BPlusTree<GenericKey<8>, RID, GenericComparator<8>> tree("foo_pk", bpm, comparator, 3, 5);
+  // GenericKey<8> index_key;
+  // create and fetch header_page
+  page_id_t page_id;
+  auto header_page = bpm->NewPage(&page_id);
+  (void)header_page;
+
+  // std::shuffle(keys.begin(), keys.end(), gen1);
+
+  // std::random_device rd;
+  // std::mt19937 gen1(rd());
+  // std::mt19937 gen2(rd());
+
+  std::vector<int64_t> phase1_key;
+  std::vector<int64_t> phase2_key;
+  for (int64_t i = 1; i < 1000; i += 2) {
+    phase1_key.push_back(i);
+    phase2_key.push_back(i + 1);
+  }
+  // std::shuffle(phase1_key.begin(), phase1_key.end(), gen1);
+  // std::shuffle(phase2_key.begin(), phase2_key.end(), gen2);
+
+  LaunchParallelTest(1, InsertHelper, &tree, phase1_key);
+
+  // LaunchParallelTest(5, InsertHelper, &tree, phase2_key);
+  // LaunchParallelTest(5, DeleteHelper, &tree, phase2_key);
+  LaunchParallelInsertDeleteTest(5, 5, InsertHelper, DeleteHelper, &tree, phase2_key, phase1_key);
+
+  tree.PrintGraphUtil();
+  size_t size = 0;
+  for (auto iterator = tree.Begin(); iterator != tree.End(); ++iterator) {
+    // current_key = remain_keys.at(size);
+    (*iterator).second;
+    // EXPECT_EQ(location.GetPageId(), 0);
+    // EXPECT_EQ(location.GetSlotNum(), current_key);
+    // LOG_INFO("fuck val: %d", location.GetSlotNum());
+    size = size + 1;
+  }
+  LOG_INFO("XX%ld", size);
+
+  bpm->UnpinPage(HEADER_PAGE_ID, true);
+  delete disk_manager;
+  delete bpm;
+  remove("test.db");
+  remove("test.log");
+}
+
+TEST(BPlusTreeConcurrentTest, SingleThreadInsertRandomDeleteTest) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -587,12 +664,10 @@ TEST(BPlusTreeConcurrentTest, DISABLED_SingleThreadInsertRandomDeleteTest) {
   index_key.SetFromInteger(start_key);
 
   for (auto iterator = tree.Begin(index_key); iterator != tree.End(); ++iterator) {
-    LOG_INFO("FUCKKKKK");
     current_key = remain_keys.at(size);
     auto location = (*iterator).second;
     EXPECT_EQ(location.GetPageId(), 0);
     EXPECT_EQ(location.GetSlotNum(), current_key);
-    LOG_INFO("fuck val: %d", location.GetSlotNum());
     size = size + 1;
   }
 
@@ -605,7 +680,7 @@ TEST(BPlusTreeConcurrentTest, DISABLED_SingleThreadInsertRandomDeleteTest) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy1DeleteTest) {
+TEST(BPlusTreeConcurrentTest, CaseStudy1DeleteTest) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -645,7 +720,6 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy1DeleteTest) {
     auto location = (*iterator).second;
     EXPECT_EQ(location.GetPageId(), 0);
     EXPECT_EQ(location.GetSlotNum(), current_key);
-    LOG_INFO("fuck val: %d", location.GetSlotNum());
     size = size + 1;
   }
 
@@ -658,7 +732,7 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy1DeleteTest) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy2DeleteTest) {
+TEST(BPlusTreeConcurrentTest, CaseStudy2DeleteTest) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -698,7 +772,6 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy2DeleteTest) {
     auto location = (*iterator).second;
     EXPECT_EQ(location.GetPageId(), 0);
     EXPECT_EQ(location.GetSlotNum(), current_key);
-    LOG_INFO("fuck val: %d", location.GetSlotNum());
     size = size + 1;
   }
 
@@ -711,7 +784,7 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy2DeleteTest) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy3DeleteTest) {
+TEST(BPlusTreeConcurrentTest, CaseStudy3DeleteTest) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -754,7 +827,6 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy3DeleteTest) {
     auto location = (*iterator).second;
     EXPECT_EQ(location.GetPageId(), 0);
     EXPECT_EQ(location.GetSlotNum(), current_key);
-    LOG_INFO("fuck val: %d", location.GetSlotNum());
     size = size + 1;
   }
 
@@ -767,7 +839,7 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy3DeleteTest) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy4DeleteTest) {
+TEST(BPlusTreeConcurrentTest, CaseStudy4DeleteTest) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -806,7 +878,6 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy4DeleteTest) {
     auto location = (*iterator).second;
     EXPECT_EQ(location.GetPageId(), 0);
     EXPECT_EQ(location.GetSlotNum(), current_key);
-    LOG_INFO("fuck val: %d", location.GetSlotNum());
     size = size + 1;
   }
 
@@ -819,7 +890,7 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy4DeleteTest) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy5DeleteTest) {
+TEST(BPlusTreeConcurrentTest, CaseStudy5DeleteTest) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -859,7 +930,6 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy5DeleteTest) {
     auto location = (*iterator).second;
     EXPECT_EQ(location.GetPageId(), 0);
     EXPECT_EQ(location.GetSlotNum(), current_key);
-    LOG_INFO("fuck val: %d", location.GetSlotNum());
     size = size + 1;
   }
 
@@ -872,7 +942,7 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy5DeleteTest) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy6DeleteTest) {
+TEST(BPlusTreeConcurrentTest, CaseStudy6DeleteTest) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -919,7 +989,6 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy6DeleteTest) {
     auto location = (*iterator).second;
     EXPECT_EQ(location.GetPageId(), 0);
     EXPECT_EQ(location.GetSlotNum(), current_key);
-    LOG_INFO("fuck val: %d", location.GetSlotNum());
     size = size + 1;
   }
 
@@ -932,7 +1001,7 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy6DeleteTest) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy7DeleteTest) {
+TEST(BPlusTreeConcurrentTest, CaseStudy7DeleteTest) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -980,7 +1049,6 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy7DeleteTest) {
     auto location = (*iterator).second;
     EXPECT_EQ(location.GetPageId(), 0);
     EXPECT_EQ(location.GetSlotNum(), current_key);
-    LOG_INFO("fuck val: %d", location.GetSlotNum());
     size = size + 1;
   }
 
@@ -993,7 +1061,7 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy7DeleteTest) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy8DeleteTest) {
+TEST(BPlusTreeConcurrentTest, CaseStudy8DeleteTest) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -1050,7 +1118,6 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy8DeleteTest) {
     auto location = (*iterator).second;
     EXPECT_EQ(location.GetPageId(), 0);
     EXPECT_EQ(location.GetSlotNum(), current_key);
-    LOG_INFO("fuck val: %d", location.GetSlotNum());
     size = size + 1;
   }
 
@@ -1063,7 +1130,7 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy8DeleteTest) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy9DeleteTest) {
+TEST(BPlusTreeConcurrentTest, CaseStudy9DeleteTest) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -1113,7 +1180,6 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy9DeleteTest) {
     auto location = (*iterator).second;
     EXPECT_EQ(location.GetPageId(), 0);
     EXPECT_EQ(location.GetSlotNum(), current_key);
-    LOG_INFO("fuck val: %d", location.GetSlotNum());
     size = size + 1;
   }
 
@@ -1126,7 +1192,7 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CaseStudy9DeleteTest) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, DISABLED_CP2DeleteTest3) {
+TEST(BPlusTreeConcurrentTest, CP2DeleteTest3) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -1169,12 +1235,10 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CP2DeleteTest3) {
   // tree.PrintGraphUtil();
 
   for (auto iterator = tree.Begin(index_key); iterator != tree.End(); ++iterator) {
-    LOG_INFO("FUCKKKKK");
     current_key = remain_keys.at(size);
     auto location = (*iterator).second;
     EXPECT_EQ(location.GetPageId(), 0);
     EXPECT_EQ(location.GetSlotNum(), current_key);
-    LOG_INFO("fuck val: %d", location.GetSlotNum());
     size = size + 1;
   }
 
@@ -1187,7 +1251,7 @@ TEST(BPlusTreeConcurrentTest, DISABLED_CP2DeleteTest3) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, DISABLED_DeleteTest1) {
+TEST(BPlusTreeConcurrentTest, DeleteTest1) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -1229,7 +1293,7 @@ TEST(BPlusTreeConcurrentTest, DISABLED_DeleteTest1) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, DISABLED_DeleteTest2) {
+TEST(BPlusTreeConcurrentTest, DeleteTest2) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());
@@ -1272,7 +1336,7 @@ TEST(BPlusTreeConcurrentTest, DISABLED_DeleteTest2) {
   remove("test.log");
 }
 
-TEST(BPlusTreeConcurrentTest, DISABLED_MixTest) {
+TEST(BPlusTreeConcurrentTest, MixTest) {
   // create KeyComparator and index schema
   auto key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema.get());

@@ -105,8 +105,6 @@ class BPlusTree {
 
   void InsertInternalCanSplit(const std::vector<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *> &st,
                               const KeyType &key, const page_id_t &value,
-                              std::unordered_map<page_id_t, bool> *unpin_is_dirty,
-                              std::unordered_map<page_id_t, size_t> *fuck,
                               std::unordered_map<page_id_t, Page *> *cached_ptr,
                               std::unordered_map<page_id_t, Page *> *unpin_coll, const std::string &signature);
 
@@ -120,13 +118,6 @@ class BPlusTree {
 
   // find the first index >= key.
   auto BinarySearch(const KeyType &key, BPlusTreeLeafPage<KeyType, RID, KeyComparator> *page_ptr) -> int;
-  /*
-    if a page (no matter leaf or internal) updates its key in slot #0,
-    it will populate through its ancestors (and stop conditionally).
-  */
-  void FirstKeyPopulateUp(
-      const KeyType &new_key,
-      std::vector<std::pair<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *, int>> *st_1);
 
   void MergedToLeftSibling(BPlusTreePage *prev_page, BPlusTreePage *this_page,
                            std::unordered_map<bustub::page_id_t, bustub::Page *> *unpin_coll);
@@ -198,11 +189,13 @@ class BPlusTree {
     Since `delete` a page, first we need to `un-pin` and `un-latch` it.
   */
   std::mutex del_page_mux_;
+  std::mutex log_mux_;
 
   enum class RootLockType : size_t { UN_LOCKED = 0, READ_LOCKED = 1, WRITE_LOCKED = 1 << 1 };
   class FinalAction {
    public:
-    explicit FinalAction(BPlusTree<KeyType, ValueType, KeyComparator> *tree) : tree_(tree), active_(true) {}
+    explicit FinalAction(std::string sig, BPlusTree<KeyType, ValueType, KeyComparator> *tree)
+        : tree_(tree), active_(true), signature_(std::move(sig)) {}
 
     ~FinalAction() {
       if (active_) {
@@ -215,7 +208,7 @@ class BPlusTree {
       auto *tmp_new_root = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(ptr);
 
       std::string full = base_ + std::to_string(tree_->op_id_) + ".dot";
-      LOG_INFO("save: %s", full.c_str());
+      LOG_INFO("[%s]: save: %s", signature_.c_str(), full.c_str());
       std::ofstream ofs(full.c_str(), std::ios_base::app);
       std::ofstream head(full.c_str(), std::ios_base::trunc);
 
@@ -233,6 +226,7 @@ class BPlusTree {
     BPlusTree<KeyType, ValueType, KeyComparator> *tree_;
     bool active_;
     std::string base_ = "/home/yhqian/archives/LABS/CMU_445/bustub/build/fuck";
+    std::string signature_;
   };
 };
 
