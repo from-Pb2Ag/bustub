@@ -98,36 +98,17 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
       // only get value in leaf page.
       auto ptr_2_leaf = reinterpret_cast<BPlusTreeLeafPage<KeyType, RID, KeyComparator> *>(ptr);
 
-      // int dst_index = BinarySearch(key, ptr_2_leaf);
-      // if (comparator_(key, ptr_2_leaf->KeyAt(dst_index)) == 0) {
-      //   result->push_back(ptr_2_leaf->ValueAt(dst_index));
-      //   return true;
-      // }
-      for (int i = 0; i < ptr_2_leaf->GetSize(); i++) {
-        KeyType this_key = ptr_2_leaf->KeyAt(i);
-        ValueType this_value = ptr_2_leaf->ValueAt(i);
-        int comp = comparator_(key, this_key);
-
-        if (comp == 0) {
-          result->push_back(this_value);
-          ptr->RUnlatch();
-          buffer_pool_manager_->UnpinPage(ptr_2_leaf->GetPageId(), false);
-          // LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(),
-          //  ptr->GetPinCount());
-          rem_cnt_.fetch_add(prime_quota);
-          buffer_pool_page_quota_.notify_one();
-          return true;
-        }
-        if (comp < 0) {
-          ptr->RUnlatch();
-          buffer_pool_manager_->UnpinPage(ptr_2_leaf->GetPageId(), false);
-          // LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(),
-          //  ptr->GetPinCount());
-          rem_cnt_.fetch_add(prime_quota);
-          buffer_pool_page_quota_.notify_one();
-          return false;
-        }
+      // update with B-search.
+      auto ret = FindFirstInfIndex(key, ptr_2_leaf);
+      if (!ret.second) {
+        result->push_back(ptr_2_leaf->ValueAt(ret.first));
+        ptr->RUnlatch();
+        buffer_pool_manager_->UnpinPage(ptr_2_leaf->GetPageId(), false);
+        rem_cnt_.fetch_add(prime_quota);
+        buffer_pool_page_quota_.notify_one();
+        return true;
       }
+
       ptr->RUnlatch();
       buffer_pool_manager_->UnpinPage(ptr_2_leaf->GetPageId(), false);
       // LOG_INFO("[%s]: page#%d release a R-latch. pin cnt: %d.", signature.c_str(), ptr->GetPageId(),
@@ -1910,9 +1891,8 @@ auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
   int index = BinarySearch(key, fuck);
   reinterpret_cast<Page *>(tmp)->RUnlatch();
   buffer_pool_manager_->UnpinPage(tmp->GetPageId(), false);
-  // rem_cnt_.fetch_add(prime_quota);
+
   return INDEXITERATOR_TYPE(buffer_pool_manager_, fuck, index, prime_quota.load(), &rem_cnt_);
-  // return INDEXITERATOR_TYPE();
 }
 
 /*
@@ -1967,18 +1947,6 @@ auto BPLUSTREE_TYPE::FindFirstInfIndex(const KeyType &key,
     return {0, true};
   }
 
-  // int index = page_ptr->GetSize();
-  // for (int i = 1; i < page_ptr->GetSize(); i++) {
-  //   int comp = comparator_(key, page_ptr->KeyAt(i));
-  //   if (comp == 0) {
-  //     return {i, false};
-  //   }
-  //   if (comp < 0) {
-  //     return {i - 1, true};
-  //   }
-  // }
-  // return {index - 1, true};
-
   int left = 1;
   int right = page_ptr->GetSize() - 1;
   while (left <= right) {
@@ -2004,20 +1972,6 @@ auto BPLUSTREE_TYPE::FindFirstInfIndex(const KeyType &key, BPlusTreeLeafPage<Key
   if (page_ptr->GetSize() == 0) {
     return {0, true};
   }
-
-  // LogLeafPage(page_ptr);
-
-  // int index = page_ptr->GetSize();
-  // for (int i = 0; i < page_ptr->GetSize(); i++) {
-  //   int comp = comparator_(key, page_ptr->KeyAt(i));
-  //   if (comp == 0) {
-  //     return {i, false};
-  //   }
-  //   if (comp < 0) {
-  //     return {i, true};
-  //   }
-  // }
-  // return {index, true};
 
   int left = 0;
   int right = page_ptr->GetSize() - 1;
@@ -2050,13 +2004,11 @@ void BPLUSTREE_TYPE::InsertInternalCanSplit(
   for (int i = st.size() - 1; i >= 0; i--) {
     auto ret = FindFirstInfIndex(tmp_key, st[i]);
     if (st[i]->GetSize() < st[i]->GetMaxSize()) {
-      // LogInternalPage(st[i]);
       st[i]->MoveForward(ret.first + 1);
       st[i]->SetKeyAt(ret.first + 1, tmp_key);
       st[i]->SetValueAt(ret.first + 1, tmp_value);
       st[i]->IncreaseSize(1);
 
-      // LogInternalPage(st[i]);
       break;
     }
     int total = st[i]->GetMaxSize() + 1;
@@ -2068,7 +2020,7 @@ void BPLUSTREE_TYPE::InsertInternalCanSplit(
 
     page_id_t neww_page;
     Page *neww_ptr = buffer_pool_manager_->NewPage(&neww_page);
-    // LOG_INFO("new a page#%d ", neww_ptr->GetPageId());
+
     cached_ptr->insert({neww_page, neww_ptr});
     unpin_coll->insert({neww_page, neww_ptr});
     // st[i] split into its new next: `neww_ptr`.
@@ -2407,7 +2359,6 @@ void BPLUSTREE_TYPE::TreeHeightTrim(std::set<Page *> *stale_root_coll) {
 
     tmp_bp_root = new_root_ptr;
   }
-  // LOG_INFO("try unpin page#%d", tmp_bp_root->GetPageId());
 
   buffer_pool_manager_->UnpinPage(tmp_bp_root->GetPageId(), true);
   // LOG_INFO("stale root page cnt: %ld. cur root: %d", stale_root_coll->size(), root_page_id_);

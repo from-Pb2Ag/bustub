@@ -44,35 +44,30 @@ BufferPoolManagerInstance::~BufferPoolManagerInstance() {
 }
 
 auto BufferPoolManagerInstance::NewPgImp(page_id_t *page_id) -> Page * {
-  std::scoped_lock<std::mutex> lock(latch_);
+  // std::scoped_lock<std::mutex> lock(latch_);
+  latch_.lock();
   frame_id_t new_frame_id = -1;
   // frame id. find from the free list first.
   if (!free_list_.empty()) {
-    // LOG_INFO("####0 get from free list. cur free list size: %ld.", free_list_.size());
     new_frame_id = free_list_.back();
     free_list_.pop_back();
   } else {
-    // std::vector<std::pair<frame_id_t, bool>> fuck;
-    // replacer_->PrintAux(&fuck);
-    // for (const auto &[a, b] : fuck) {
-    //   LOG_INFO("frame/page: %d/%d is evictable? %d", a, (pages_ + a)->GetPageId(), b);
-    // }
     if (replacer_->Evict(&new_frame_id)) {
       page_id_t stale_page_id = pages_[new_frame_id].GetPageId();
-      // LOG_INFO("$$$$0 get from evict frame#%d page#%d", new_frame_id, stale_page_id);
       if (pages_[new_frame_id].IsDirty()) {
         FlushPgImpInner(stale_page_id);
       }
       page_table_->Remove(stale_page_id);
     } else {
-      // LOG_INFO("@@@@0 failed");
       // if now free_list and can evict nothing.
+      latch_.unlock();
       return nullptr;
     }
   }
   /*
     reset the memory and metadata for the new page.
   */
+  latch_.unlock();
   *page_id = AllocatePage();
 
   // LOG_INFO("new a page with `NewPgImp`. new page#%d. frame#%d", *page_id, new_frame_id);
@@ -111,25 +106,16 @@ auto BufferPoolManagerInstance::FetchPgImp(page_id_t page_id) -> Page * {
   }
 
   if (!free_list_.empty()) {
-    // LOG_INFO("####1 get from free list. cur free list size: %ld.", free_list_.size());
     corresponding_f_id = free_list_.back();
     free_list_.pop_back();
   } else {
-    // std::vector<std::pair<frame_id_t, bool>> fuck;
-    // replacer_->PrintAux(&fuck);
-    // for (const auto &[a, b] : fuck) {
-    //   LOG_INFO("frame/page: %d/%d is evictable? %d", a, (pages_ + a)->GetPageId(), b);
-    // }
     if (replacer_->Evict(&corresponding_f_id)) {
       page_id_t stale_page_id = pages_[corresponding_f_id].GetPageId();
-      // LOG_INFO("$$$$1 fetch page#%d. get from evict frame#%d page#%d", page_id, corresponding_f_id, stale_page_id);
       if (pages_[corresponding_f_id].IsDirty()) {
         FlushPgImpInner(stale_page_id);
       }
       page_table_->Remove(stale_page_id);
     } else {
-      // LOG_INFO("@@@@1 failed");
-      // if now free_list and can evict nothing.
       latch_.unlock();
       return nullptr;
       // return NULL;
@@ -169,18 +155,8 @@ auto BufferPoolManagerInstance::UnpinPgImp(page_id_t page_id, bool is_dirty) -> 
 
   if (--pages_[corresponding_f_id].pin_count_ == 0) {
     // set evitable.
-    // LOG_INFO("set frame/page: %d/%d evictable.", corresponding_f_id, page_id);
 
-    // LOG_INFO("**********");
     replacer_->SetEvictable(corresponding_f_id, true);
-    // std::vector<std::pair<frame_id_t, bool>> fuck;
-    // std::unordered_map<frame_id_t, bool> damn;
-    // replacer_->PrintAux(&fuck);
-    // for (const auto &[a, b] : fuck) {
-    //   damn.insert({a, true});
-    //   LOG_INFO("frame/page: %d/%d is evictable? %d", a, (pages_ + a)->GetPageId(), b);
-    // }
-    // LOG_INFO("**********");
   }
   if (is_dirty) {
     pages_[corresponding_f_id].is_dirty_ = true;
@@ -201,9 +177,9 @@ auto BufferPoolManagerInstance::FlushPgImpInner(page_id_t page_id) -> bool {
   }
 
   // flush into disk, then unset dirty flag.
-  pages_[corresponding_f_id].rwlatch_.RLock();
+  pages_[corresponding_f_id].RLatch();
   disk_manager_->WritePage(page_id, pages_[corresponding_f_id].GetData());
-  pages_[corresponding_f_id].rwlatch_.RUnlock();
+  pages_[corresponding_f_id].RUnlatch();
 
   pages_[corresponding_f_id].is_dirty_ = false;
 
@@ -217,9 +193,9 @@ void BufferPoolManagerInstance::FlushAllPgsImp() {
   latch_.unlock();
 
   for (size_t i = 0; i < pool_size; i++) {
-    pages_[i].rwlatch_.RLock();
+    pages_[i].RLatch();
     disk_manager_->WritePage(pages_[i].GetPageId(), pages_[i].GetData());
-    pages_[i].rwlatch_.RUnlock();
+    pages_[i].RUnlatch();
 
     pages_[i].is_dirty_ = false;
   }
