@@ -188,9 +188,9 @@ auto BufferPoolManagerInstance::FlushPgImpInner(page_id_t page_id) -> bool {
 
 void BufferPoolManagerInstance::FlushAllPgsImp() {
   // std::scoped_lock<std::mutex> lock(latch_);
-  latch_.lock();
+  // latch_.lock();
   size_t pool_size = GetPoolSize();
-  latch_.unlock();
+  // latch_.unlock();
 
   for (size_t i = 0; i < pool_size; i++) {
     pages_[i].RLatch();

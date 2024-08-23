@@ -159,6 +159,10 @@ class LRUKReplacer {
   */
   std::map<size_t, frame_id_t> record_first_;
   std::map<size_t, frame_id_t> total_first_;
+
+  std::list<std::pair<size_t, frame_id_t>> first_time_list_;
+  // 指向若干个`first_time_list_`的节点.
+  std::unordered_map<frame_id_t, std::list<std::list<std::pair<size_t, frame_id_t>>::iterator>> frames_coll_iters_;
 };
 
 }  // namespace bustub

@@ -53,6 +53,21 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
     frames_st_end_.erase(track_frame);
   }
 
+  if (!first_time_list_.empty()) {
+    auto itx = first_time_list_.front();
+    track_frame = itx.first;
+    for (const auto& x : frames_coll_iters_[itx.second]) {
+      first_time_list_.erase(x);
+    }
+
+    frames_coll_iters_.erase(itx.second);
+    evictable_coll_.erase(track_frame);
+    replacer_size_--;
+    frames_coll_enforced_.erase(track_frame);
+    frames_st_end_.erase(track_frame);
+    return true;
+  }
+
   return is_success;
   //   return false;
 }
@@ -66,6 +81,7 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id) {
   auto it = frames_coll_enforced_.find(frame_id);
   if (it == frames_coll_enforced_.end()) {
     frames_coll_enforced_.insert({frame_id, std::vector<int64_t>(k_ + 1)});
+    frames_coll_iters_.insert({frame_id, std::list<std::list<std::pair<size_t, frame_id_t>>::iterator>()});
     // fuck, `std::vector<int64_t>(k_)` only results in size == capacity == k_.
     it = frames_coll_enforced_.find(frame_id);
     it->second.at(k_) = 0;
@@ -90,6 +106,16 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id) {
       record_first_.insert({it->second.at(frames_st_end_[frame_id].first), frame_id});
     }
   }
+
+  if (evictable_coll_.find(frame_id) != evictable_coll_.end()) {
+    first_time_list_.push_back({current_timestamp_, frame_id});
+    frames_coll_iters_[frame_id].push_back(--first_time_list_.end());
+    if (frames_coll_iters_[frame_id].size() > k_) {
+      auto itx = frames_coll_iters_[frame_id].front();
+      first_time_list_.erase(itx);
+      frames_coll_iters_[frame_id].pop_front();
+    }
+  }
 }
 
 void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
@@ -106,6 +132,9 @@ void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
     } else {
       total_first_[saved_first_tsp] = frame_id;
     }
+    for (int i = frames_st_end_[frame_id].first; i != frames_st_end_[frame_id].second; i = (i + 1) % k_) {
+      size_t tmp_time = frames_coll_enforced_[frame_id][i];
+    }
     evictable_coll_.insert({frame_id, true});
 
     size_t first_idx = frames_st_end_[frame_id].first;
@@ -118,6 +147,10 @@ void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
   } else if (!set_evictable && (it != evictable_coll_.end())) {
     record_first_.erase(saved_first_tsp);
     total_first_.erase(saved_first_tsp);
+    for (const auto& x : frames_coll_iters_[frame_id]) {
+      first_time_list_.erase(x);
+    }
+    frames_coll_iters_.find(frame_id)->second.clear();
     evictable_coll_.erase(it);
     replacer_size_--;
   }
@@ -132,6 +165,10 @@ void LRUKReplacer::Remove(frame_id_t frame_id) {
     // `along with its access history`.
     record_first_.erase(frames_coll_enforced_[frame_id].at(frames_st_end_[frame_id].first));
     total_first_.erase(frames_coll_enforced_[frame_id].at(frames_st_end_[frame_id].first));
+    for (const auto &x : frames_coll_iters_[frame_id]) {
+      first_time_list_.erase(x);
+    }
+    frames_coll_iters_.find(frame_id)->second.clear();
 
     frames_coll_enforced_.erase(frame_id);
     frames_st_end_.erase(frame_id);
